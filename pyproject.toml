@@ -1,7 +1,8 @@
 [project]
 name = "ingest-llm-as"
 version = "0.1.0"
-description = ""
+description = "A microservice for ingesting data into the ApexSigma ecosystem."
+license = "MIT"
 authors = [
     {name = "SigmaDev11",email = "steynsean11@gmail.com"}
 ]
@@ -11,7 +12,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-packages = [{include = "ingest_llm", from = "src"}]
+packages = [{include = "ingest_llm_as", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.13"
