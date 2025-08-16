@@ -115,6 +115,16 @@ class MemOSClient:
             ValidationError: If response data is invalid
         """
         try:
+            # Map memory tier enum to numeric format expected by memOS.as
+            tier_mapping = {
+                MemoryTier.WORKING: "1",      # Working memory
+                MemoryTier.EPISODIC: "2",     # Episodic memory  
+                MemoryTier.SEMANTIC: "3",     # Semantic memory
+                MemoryTier.PROCEDURAL: "1",   # Map procedural to working for now
+            }
+            
+            tier_number = tier_mapping.get(memory_tier, "3")  # Default to semantic
+            
             # Prepare storage request
             storage_request = MemoryStorageRequest(
                 content=content,
@@ -124,8 +134,8 @@ class MemOSClient:
                 relationships=relationships or [],
             )
 
-            # Send to memOS.as
-            endpoint = f"/memory/{memory_tier.value}/store"
+            # Send to memOS.as using numeric tier
+            endpoint = f"/memory/{tier_number}/store"
 
             logger.info(f"Storing content in {memory_tier.value} memory tier")
 

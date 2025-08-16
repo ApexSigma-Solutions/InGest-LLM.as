@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     enable_async_processing: bool = True
     async_queue_max_size: int = 1000
 
+    # LM Studio integration for embeddings
+    lm_studio_base_url: str = "http://localhost:1234/v1"
+    lm_studio_api_key: Optional[str] = None
+    lm_studio_timeout: int = 30
+    lm_studio_enabled: bool = True
+    
+    # Embedding configuration
+    embedding_enabled: bool = True
+    embedding_batch_size: int = 10
+    embedding_dimension: int = 768  # Default for nomic-embed models
+
     class Config:
         env_file = ".env"
         env_prefix = "INGEST_"

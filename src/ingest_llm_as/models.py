@@ -99,10 +99,20 @@ class MemoryStorageRequest(BaseModel):
 class MemoryStorageResponse(BaseModel):
     """Response from memOS.as memory storage."""
 
-    memory_id: UUID
-    memory_tier: MemoryTier
-    status: str
-    created_at: datetime
+    success: bool
+    tier: int
+    message: str
+    memory_id: Optional[int] = None  # Optional, sometimes not returned
+    
+    @property
+    def memory_tier(self) -> MemoryTier:
+        """Convert numeric tier to MemoryTier enum."""
+        tier_mapping = {
+            1: MemoryTier.WORKING,
+            2: MemoryTier.EPISODIC, 
+            3: MemoryTier.SEMANTIC
+        }
+        return tier_mapping.get(self.tier, MemoryTier.SEMANTIC)
 
 
 class ProcessingStatus(str, Enum):

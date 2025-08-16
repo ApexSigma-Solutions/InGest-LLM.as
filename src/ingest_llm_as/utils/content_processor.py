@@ -7,10 +7,11 @@ content for storage in the memOS.as memory system.
 
 import re
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime
 
 from ..config import settings
+from ..services.vectorizer import generate_content_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +21,21 @@ class ContentProcessor:
     Handles content processing and chunking for ingestion.
 
     Provides methods to clean, validate, and chunk content
-    for optimal storage in different memory tiers.
+    for optimal storage in different memory tiers with embedding generation.
     """
 
-    def __init__(self, chunk_size: int = None):
+    def __init__(self, chunk_size: int = None, enable_embeddings: bool = None):
         """
         Initialize content processor.
 
         Args:
             chunk_size: Maximum size for content chunks
+            enable_embeddings: Whether to generate embeddings for content
         """
         self.chunk_size = chunk_size or settings.default_chunk_size
         self.max_chunk_size = 10000  # Hard limit
         self.min_chunk_size = 100  # Minimum viable chunk
+        self.enable_embeddings = enable_embeddings if enable_embeddings is not None else settings.embedding_enabled
 
     def clean_content(self, content: str) -> str:
         """
@@ -226,6 +229,100 @@ class ContentProcessor:
         return (stripped.startswith("{") and stripped.endswith("}")) or (
             stripped.startswith("[") and stripped.endswith("]")
         )
+
+    async def generate_embeddings_for_chunks(
+        self,
+        chunks: List[str],
+        content_type: str,
+        detected_type: str = None
+    ) -> List[Optional[List[float]]]:
+        """
+        Generate embeddings for content chunks using LM Studio.
+        
+        Implements TASK-IG-16: Integrate the vectorizer service into the main
+        ingestion flow with live calls to local models.
+        
+        Args:
+            chunks: List of content chunks to embed
+            content_type: Content type for model selection
+            detected_type: Auto-detected content type
+            
+        Returns:
+            List[Optional[List[float]]]: Embeddings for each chunk (None if generation fails)
+        """
+        if not self.enable_embeddings or not settings.lm_studio_enabled:
+            logger.debug("Embedding generation disabled, returning None embeddings")
+            return [None] * len(chunks)
+        
+        embeddings = []
+        
+        for i, chunk in enumerate(chunks):
+            try:
+                embedding = await generate_content_embedding(
+                    content=chunk,
+                    content_type=content_type,
+                    detected_type=detected_type
+                )
+                embeddings.append(embedding)
+                
+                if embedding:
+                    logger.debug(f"Generated embedding for chunk {i+1}/{len(chunks)}")
+                else:
+                    logger.warning(f"Failed to generate embedding for chunk {i+1}/{len(chunks)}")
+                    
+            except Exception as e:
+                logger.error(f"Error generating embedding for chunk {i+1}: {e}")
+                embeddings.append(None)
+        
+        success_count = sum(1 for emb in embeddings if emb is not None)
+        logger.info(f"Generated {success_count}/{len(chunks)} embeddings successfully")
+        
+        return embeddings
+    
+    async def process_content_with_embeddings(
+        self,
+        content: str,
+        content_type: str,
+        detected_type: str = None
+    ) -> Dict[str, Any]:
+        """
+        Process content with chunking and embedding generation.
+        
+        Args:
+            content: Raw content to process
+            content_type: Content type for processing
+            detected_type: Auto-detected content type
+            
+        Returns:
+            Dict[str, Any]: Processing results with chunks and embeddings
+        """
+        # Clean and chunk content
+        cleaned_content = self.clean_content(content)
+        chunks = self.chunk_content(cleaned_content)
+        
+        # Extract metadata
+        content_metadata = self.extract_metadata_from_content(cleaned_content)
+        
+        # Generate embeddings
+        embeddings = await self.generate_embeddings_for_chunks(
+            chunks=chunks,
+            content_type=content_type,
+            detected_type=detected_type or content_metadata.get("detected_type")
+        )
+        
+        return {
+            "cleaned_content": cleaned_content,
+            "chunks": chunks,
+            "embeddings": embeddings,
+            "content_metadata": content_metadata,
+            "processing_stats": {
+                "original_size": len(content),
+                "cleaned_size": len(cleaned_content),
+                "chunk_count": len(chunks),
+                "embeddings_generated": sum(1 for emb in embeddings if emb is not None),
+                "embedding_enabled": self.enable_embeddings,
+            }
+        }
 
 
 def create_ingestion_metadata(

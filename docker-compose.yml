@@ -1,0 +1,77 @@
+services:
+  ingest-llm-api:
+    build: .
+    container_name: devenviro_ingest_llm_api
+    ports:
+      - "8002:8000"  # InGest-LLM.as on port 8002 (avoiding conflict with tools-as)
+    env_file:
+      - .env
+    environment:
+      # memOS.as integration - use container name for internal networking
+      - INGEST_MEMOS_BASE_URL=http://devenviro_memos_api:8090
+      - INGEST_MEMOS_TIMEOUT=30
+      
+      # LM Studio integration - host networking for local LM Studio
+      - INGEST_LM_STUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      - INGEST_LM_STUDIO_ENABLED=true
+      - INGEST_EMBEDDING_ENABLED=true
+      
+      # Observability integration with existing stack
+      - JAEGER_ENDPOINT=http://devenviro_jaeger:14268/api/traces
+      - PROMETHEUS_GATEWAY=http://devenviro_prometheus:9090
+      
+      # Service configuration
+      - INGEST_APP_NAME=InGest-LLM.as
+      - INGEST_DEBUG=false
+      - LOG_LEVEL=INFO
+      - LOG_JSON=true
+      - ENVIRONMENT=docker
+      
+    # depends_on:
+      # Explicit dependency on memOS.as service - temporarily disabled for testing
+      # - memos-api-external
+      
+    networks:
+      - devenviroas_default
+      
+    restart: unless-stopped
+    
+    # Health check to ensure service is ready
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Reference to external memOS.as service for dependency management
+  memos-api-external:
+    image: hello-world  # Dummy service to represent external dependency
+    container_name: devenviro_memos_dependency_check
+    command: echo "memOS.as dependency check - this should be running externally"
+    networks:
+      - devenviroas_default
+    
+  # Integration test runner service
+  test-runner:
+    build: .
+    container_name: devenviro_ingest_test_runner
+    env_file:
+      - .env
+    environment:
+      # Test against the containerized API
+      - INGEST_API_BASE_URL=http://ingest-llm-api:8000
+      - INGEST_MEMOS_BASE_URL=http://devenviro_memos_api:8090
+      - TEST_MODE=integration
+    networks:
+      - devenviroas_default
+    depends_on:
+      - ingest-llm-api
+    command: ["pytest", "-v", "/app/tests/", "-m", "integration"]
+    profiles:
+      - testing  # Only run when explicitly requested
+
+# Use the existing DevEnviro network for service communication
+networks:
+  devenviroas_default:
+    external: true

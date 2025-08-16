@@ -6,7 +6,7 @@ and storing content in the memOS.as memory system.
 """
 
 import time
-from typing import List
+from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
@@ -99,37 +99,46 @@ async def ingest_text(
     )
 
     try:
-        # Initialize content processor
+        # Initialize content processor with embedding capability
         processor = ContentProcessor(chunk_size=request.chunk_size)
 
-        # Clean and validate content
-        cleaned_content = processor.clean_content(request.content)
-
-        if len(cleaned_content) > settings.max_content_size:
+        # Validate content size early
+        if len(request.content) > settings.max_content_size:
             raise HTTPException(
                 status_code=413,
-                detail=f"Content too large: {len(cleaned_content)} > {settings.max_content_size}",
+                detail=f"Content too large: {len(request.content)} > {settings.max_content_size}",
             )
 
         # Check memOS.as connectivity
         if not await memos_client.health_check():
             raise HTTPException(status_code=503, detail="memOS.as service unavailable")
 
-        # Process content into chunks
-        chunks = processor.chunk_content(cleaned_content)
+        # Process content with embeddings (implements TASK-IG-16)
+        processing_result = await processor.process_content_with_embeddings(
+            content=request.content,
+            content_type=request.metadata.content_type.value
+        )
+        
+        chunks = processing_result["chunks"]
+        embeddings = processing_result["embeddings"]
+        processing_stats = processing_result["processing_stats"]
 
         if not chunks:
             raise HTTPException(
                 status_code=400, detail="No valid content chunks could be created"
             )
 
-        logger.info(f"Created {len(chunks)} chunks for ingestion {ingestion_id}")
+        logger.info(
+            f"Created {len(chunks)} chunks for ingestion {ingestion_id}", 
+            embeddings_generated=processing_stats["embeddings_generated"],
+            embedding_enabled=processing_stats["embedding_enabled"]
+        )
 
         # Process synchronously or asynchronously based on request
         if request.process_async and settings.enable_async_processing:
             # Queue for background processing
             background_tasks.add_task(
-                _process_chunks_async, chunks, request, ingestion_id, processor
+                _process_chunks_async, chunks, embeddings, request, ingestion_id, processor
             )
 
             # Return immediate response
@@ -142,7 +151,7 @@ async def ingest_text(
         else:
             # Process synchronously
             results = await _process_chunks_sync(
-                chunks, request, processor, memos_client
+                chunks, embeddings, request, processor, memos_client
             )
 
             # Determine overall status
@@ -228,15 +237,17 @@ async def ingest_text(
 
 async def _process_chunks_sync(
     chunks: List[str],
+    embeddings: List[Optional[List[float]]],
     request: IngestionRequest,
     processor: ContentProcessor,
     memos_client: MemOSClient,
 ) -> List[IngestionResult]:
     """
-    Process chunks synchronously.
+    Process chunks synchronously with embeddings.
 
     Args:
         chunks: Content chunks to process
+        embeddings: Corresponding embeddings for each chunk
         request: Original ingestion request
         processor: Content processor instance
         memos_client: memOS.as client
@@ -248,6 +259,9 @@ async def _process_chunks_sync(
 
     for i, chunk in enumerate(chunks):
         try:
+            # Get corresponding embedding for this chunk
+            embedding = embeddings[i] if i < len(embeddings) else None
+            
             result = await _process_single_chunk(
                 chunk=chunk,
                 chunk_index=i,
@@ -255,6 +269,7 @@ async def _process_chunks_sync(
                 request=request,
                 processor=processor,
                 memos_client=memos_client,
+                embedding=embedding,
             )
             results.append(result)
 
@@ -276,15 +291,17 @@ async def _process_chunks_sync(
 
 async def _process_chunks_async(
     chunks: List[str],
+    embeddings: List[Optional[List[float]]],
     request: IngestionRequest,
     ingestion_id: uuid4,
     processor: ContentProcessor,
 ):
     """
-    Process chunks asynchronously in background.
+    Process chunks asynchronously in background with embeddings.
 
     Args:
         chunks: Content chunks to process
+        embeddings: Corresponding embeddings for each chunk
         request: Original ingestion request
         ingestion_id: Unique ingestion identifier
         processor: Content processor instance
@@ -294,7 +311,7 @@ async def _process_chunks_async(
     try:
         async with get_memos_client() as memos_client:
             await _process_chunks_sync(
-                chunks, request, processor, memos_client
+                chunks, embeddings, request, processor, memos_client
             )
 
         # TODO: Store results for later retrieval via status endpoint
@@ -311,6 +328,7 @@ async def _process_single_chunk(
     request: IngestionRequest,
     processor: ContentProcessor,
     memos_client: MemOSClient,
+    embedding: Optional[List[float]] = None,
 ) -> IngestionResult:
     """
     Process a single content chunk.
@@ -343,18 +361,25 @@ async def _process_single_chunk(
     # Determine memory tier based on content type and metadata
     memory_tier = _determine_memory_tier(request.metadata.content_type)
 
-    # Store in memOS.as
+    # Store in memOS.as with embedding
     storage_response = await memos_client.store_memory(
-        content=chunk, memory_tier=memory_tier, metadata=storage_metadata
+        content=chunk, 
+        memory_tier=memory_tier, 
+        metadata=storage_metadata,
+        embedding=embedding
     )
 
-    # Create result
+    # Create result - handle case where memory_id may not be returned
+    result_memory_id = None
+    if hasattr(storage_response, 'memory_id') and storage_response.memory_id:
+        result_memory_id = UUID(int=storage_response.memory_id) if isinstance(storage_response.memory_id, int) else storage_response.memory_id
+    
     return IngestionResult(
-        memory_id=storage_response.memory_id,
+        memory_id=result_memory_id,
         memory_tier=memory_tier,
         content_hash=content_hash,
         chunk_size=len(chunk),
-        status=ProcessingStatus.COMPLETED,
+        status=ProcessingStatus.COMPLETED if storage_response.success else ProcessingStatus.FAILED,
     )
 
 
