@@ -9,9 +9,6 @@ Docker Compose environment.
 import asyncio
 import pytest
 import httpx
-from typing import Dict, Any
-from uuid import UUID
-import time
 
 # Test configuration
 INGEST_API_BASE_URL = "http://localhost:8002"
