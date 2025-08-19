@@ -75,7 +75,7 @@ class ChatThreadSummarizer:
         if save_progress and SERVICES_AVAILABLE:
             await self._save_progress_to_memos(summary, env_snapshot)
         
-        print("✅ Chat thread summarization completed!")
+        print("SUCCESS: Chat thread summarization completed!")
         return summary
     
     async def _load_chat_thread(self, file_path: str) -> Dict[str, Any]:
@@ -119,7 +119,7 @@ class ChatThreadSummarizer:
             return chat_data
             
         except Exception as e:
-            print(f"❌ Error loading chat thread: {e}")
+            print(f"ERROR: Error loading chat thread: {e}")
             raise
     
     async def _create_environment_snapshot(self) -> Dict[str, Any]:
@@ -201,7 +201,7 @@ class ChatThreadSummarizer:
             return snapshot
             
         except Exception as e:
-            print(f"⚠️  Environment snapshot limited due to error: {e}")
+            print(f"WARNING: Environment snapshot limited due to error: {e}")
             return {
                 "timestamp": datetime.now().isoformat(),
                 "session_id": self.session_id,
