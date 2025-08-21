@@ -28,16 +28,16 @@ ENV POETRY_NO_INTERACTION=1 \
 COPY pyproject.toml poetry.lock* README.md ./
 
 # Install dependencies only (not the project itself yet)  
-RUN poetry install --only=main --no-root
+RUN poetry install --no-root
 
 # Copy source code
 COPY src/ ./src/
 
 # Install the project itself
-RUN poetry install --only-root
+RUN poetry install
 
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["poetry", "run", "uvicorn", "src.ingest_llm_as.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use Poetry's environment directly
+CMD ["poetry", "run", "python", "-m", "uvicorn", "src.ingest_llm_as.main:app", "--host", "0.0.0.0", "--port", "8000"]

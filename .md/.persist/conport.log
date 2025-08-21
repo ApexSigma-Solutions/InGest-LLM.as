@@ -1,0 +1,24 @@
+2025-08-17 11:24:29,853 - INFO - context_portal_mcp.main - File logging configured to: ${workspaceFolder}\context_portal\./logs/conport.log
+2025-08-17 11:24:29,853 - INFO - context_portal_mcp.main - Parsed CLI args: Namespace(host='127.0.0.1', port=8000, workspace_id='${workspaceFolder}', mode='stdio', log_file='./logs/conport.log', log_level='INFO')
+2025-08-17 11:24:29,853 - INFO - context_portal_mcp.main - Starting ConPort in STDIO mode using FastMCP for initial CLI arg workspace_id: ${workspaceFolder}
+2025-08-17 11:24:29,853 - WARNING - context_portal_mcp.main - MAIN.PY: WARNING - Workspace ID was literally '${workspaceFolder}'. This variable was not expanded by the client IDE. Falling back to current working directory as workspace_id: c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as. Ensure CWD in MCP config ('c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as') is the correct project workspace.
+2025-08-17 11:24:29,853 - INFO - context_portal_mcp.main - Pre-warming database connection for workspace: c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as
+2025-08-17 11:24:29,854 - INFO - context_portal_mcp.db.database - Alembic.ini not found. Creating at c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic.ini
+2025-08-17 11:24:29,854 - INFO - context_portal_mcp.db.database - Alembic env.py not found. Creating at c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic\env.py
+2025-08-17 11:24:29,855 - INFO - context_portal_mcp.db.database - Initial schema not found. Creating at c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic\versions\2025_06_17_initial_schema.py
+2025-08-17 11:24:29,867 - INFO - context_portal_mcp.db.database - Alembic: Script directory c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic confirmed to exist by Python.
+2025-08-17 11:24:29,867 - INFO - context_portal_mcp.db.database - Running Alembic migrations for database: c:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\context.db
+2025-08-17 21:16:06,226 - INFO - context_portal_mcp.main - File logging configured to: ${workspaceFolder}\context_portal\./logs/conport.log
+2025-08-17 21:16:06,227 - INFO - context_portal_mcp.main - Parsed CLI args: Namespace(host='127.0.0.1', port=8000, workspace_id='${workspaceFolder}', mode='stdio', log_file='./logs/conport.log', log_level='INFO')
+2025-08-17 21:16:06,227 - INFO - context_portal_mcp.main - Starting ConPort in STDIO mode using FastMCP for initial CLI arg workspace_id: ${workspaceFolder}
+2025-08-17 21:16:06,227 - WARNING - context_portal_mcp.main - MAIN.PY: WARNING - Workspace ID was literally '${workspaceFolder}'. This variable was not expanded by the client IDE. Falling back to current working directory as workspace_id: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as. Ensure CWD in MCP config ('C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as') is the correct project workspace.
+2025-08-17 21:16:06,227 - INFO - context_portal_mcp.main - Pre-warming database connection for workspace: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as
+2025-08-17 21:16:06,230 - INFO - context_portal_mcp.db.database - Alembic: Script directory C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic confirmed to exist by Python.
+2025-08-17 21:16:06,230 - INFO - context_portal_mcp.db.database - Running Alembic migrations for database: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\context.db
+2025-08-17 22:07:37,720 - INFO - context_portal_mcp.main - File logging configured to: ${workspaceFolder}\context_portal\./logs/conport.log
+2025-08-17 22:07:37,721 - INFO - context_portal_mcp.main - Parsed CLI args: Namespace(host='127.0.0.1', port=8000, workspace_id='${workspaceFolder}', mode='stdio', log_file='./logs/conport.log', log_level='INFO')
+2025-08-17 22:07:37,721 - INFO - context_portal_mcp.main - Starting ConPort in STDIO mode using FastMCP for initial CLI arg workspace_id: ${workspaceFolder}
+2025-08-17 22:07:37,721 - WARNING - context_portal_mcp.main - MAIN.PY: WARNING - Workspace ID was literally '${workspaceFolder}'. This variable was not expanded by the client IDE. Falling back to current working directory as workspace_id: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as. Ensure CWD in MCP config ('C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as') is the correct project workspace.
+2025-08-17 22:07:37,721 - INFO - context_portal_mcp.main - Pre-warming database connection for workspace: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as
+2025-08-17 22:07:37,724 - INFO - context_portal_mcp.db.database - Alembic: Script directory C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\alembic confirmed to exist by Python.
+2025-08-17 22:07:37,724 - INFO - context_portal_mcp.db.database - Running Alembic migrations for database: C:\Users\steyn\ApexSigmaProjects.Dev\InGest-LLM.as\context_portal\context.db

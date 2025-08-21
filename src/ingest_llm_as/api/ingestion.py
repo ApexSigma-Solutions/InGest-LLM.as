@@ -113,11 +113,25 @@ async def ingest_text(
         if not await memos_client.health_check():
             raise HTTPException(status_code=503, detail="memOS.as service unavailable")
 
-        # Process content with embeddings (implements TASK-IG-16)
-        processing_result = await processor.process_content_with_embeddings(
-            content=request.content,
-            content_type=request.metadata.content_type.value
+        # Detect content type for intelligent processing
+        detected_type = processor.detect_content_type(
+            content=request.content, 
+            file_path=request.metadata.source_url
         )
+        
+        # Process content with embeddings - use AST parser for Python code
+        if detected_type == "python" or request.metadata.content_type.value == "code":
+            processing_result = await processor.process_python_code_with_embeddings(
+                source_code=request.content,
+                file_path=request.metadata.source_url,
+                content_type=request.metadata.content_type.value
+            )
+        else:
+            processing_result = await processor.process_content_with_embeddings(
+                content=request.content,
+                content_type=request.metadata.content_type.value,
+                detected_type=detected_type
+            )
         
         chunks = processing_result["chunks"]
         embeddings = processing_result["embeddings"]

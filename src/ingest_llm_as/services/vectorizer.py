@@ -7,6 +7,7 @@ embeddings using local models (nomic-embed-text, nomic-embed-code).
 
 from typing import List, Optional, Dict, Any
 from enum import Enum
+import time
 
 import numpy as np
 from openai import OpenAI
@@ -14,6 +15,7 @@ import httpx
 
 from ..config import settings
 from ..observability.logging import get_logger
+from ..observability.langfuse_client import get_langfuse_client
 
 logger = get_logger(__name__)
 
@@ -21,9 +23,9 @@ logger = get_logger(__name__)
 class EmbeddingModelType(str, Enum):
     """Available embedding models in LM Studio."""
     
-    TEXT = "nomic-embed-text-v1.5"
+    TEXT = "text-embedding-nomic-embed-text-v1.5@q5_k_m"  # Your current model
     CODE = "nomic-embed-code-v1"
-    GENERAL = "text-embedding-3-small"  # Fallback model
+    GENERAL = "text-embedding-nomic-embed-text-v1.5@q5_k_m"  # Use your current model as fallback
 
 
 class VectorizerError(Exception):
@@ -75,7 +77,8 @@ class LMStudioVectorizer:
         """
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{self.base_url}/health")
+                # LM Studio doesn't have /health, use /models instead (base_url includes /v1)
+                response = await client.get(f"{self.base_url}/models")
                 return response.status_code == 200
         except Exception as e:
             logger.warning(f"LM Studio health check failed: {e}")
@@ -118,31 +121,78 @@ class LMStudioVectorizer:
         Returns:
             str: Selected model name
         """
+        langfuse_client = get_langfuse_client()
+        
+        # Create Langfuse trace for model selection
+        trace_id = None
+        if langfuse_client.enabled:
+            trace_id = langfuse_client.create_trace(
+                name="embedding_model_selection",
+                metadata={
+                    "content_type": content_type,
+                    "detected_type": detected_type,
+                    "selection_strategy": "content_type_based"
+                },
+                tags=["embedding", "model_selection", content_type],
+                input_data={
+                    "content_type": content_type,
+                    "detected_type": detected_type
+                }
+            )
+        
         available_models = self.get_available_models()
+        selected_model = None
+        selection_reason = ""
         
         # Priority selection based on content analysis
         if content_type.lower() in ["code", "python", "javascript", "json"] or \
-           (detected_type and detected_type.lower() == "code"):
+           (detected_type and detected_type.lower() in ["code", "python"]):
             
             # Prefer code-specialized model
             if EmbeddingModelType.CODE.value in available_models:
-                logger.debug(f"Selected {EmbeddingModelType.CODE.value} for code content")
-                return EmbeddingModelType.CODE.value
-        
+                selected_model = EmbeddingModelType.CODE.value
+                selection_reason = "code_specialized_model_available"
+                logger.debug(f"Selected {selected_model} for code content")
+            
         # For text, documentation, markdown
-        if EmbeddingModelType.TEXT.value in available_models:
-            logger.debug(f"Selected {EmbeddingModelType.TEXT.value} for text content")
-            return EmbeddingModelType.TEXT.value
+        if not selected_model and EmbeddingModelType.TEXT.value in available_models:
+            selected_model = EmbeddingModelType.TEXT.value
+            selection_reason = "text_specialized_model_available"
+            logger.debug(f"Selected {selected_model} for text content")
         
         # Fallback to first available model
-        if available_models:
-            fallback_model = available_models[0]
-            logger.warning(f"Using fallback model {fallback_model} for content type {content_type}")
-            return fallback_model
+        if not selected_model and available_models:
+            selected_model = available_models[0]
+            selection_reason = "fallback_to_first_available"
+            logger.warning(f"Using fallback model {selected_model} for content type {content_type}")
         
         # Final fallback
-        logger.warning("No specialized models available, using general model")
-        return EmbeddingModelType.GENERAL.value
+        if not selected_model:
+            selected_model = EmbeddingModelType.GENERAL.value
+            selection_reason = "final_fallback_model"
+            logger.warning("No specialized models available, using general model")
+        
+        # Update Langfuse trace with selection result
+        if langfuse_client.enabled and trace_id:
+            langfuse_client.client.trace(
+                id=trace_id,
+                output={
+                    "selected_model": selected_model,
+                    "selection_reason": selection_reason,
+                    "available_models": available_models
+                }
+            )
+            
+            # Score the model selection quality
+            quality_score = 1.0 if "specialized" in selection_reason else 0.5 if "fallback" in selection_reason else 0.3
+            langfuse_client.score_trace(
+                trace_id=trace_id,
+                name="model_selection_quality",
+                value=quality_score,
+                comment=f"Model selection: {selection_reason}"
+            )
+        
+        return selected_model
     
     def generate_embedding(
         self,
@@ -167,6 +217,31 @@ class LMStudioVectorizer:
             VectorizerConnectionError: If unable to connect to LM Studio
             VectorizerAPIError: If embedding generation fails
         """
+        langfuse_client = get_langfuse_client()
+        start_time = time.time()
+        
+        # Create Langfuse trace for embedding generation
+        trace_id = None
+        if langfuse_client.enabled:
+            trace_id = langfuse_client.create_trace(
+                name="embedding_generation",
+                metadata={
+                    "content_type": content_type,
+                    "detected_type": detected_type,
+                    "content_length": len(text),
+                    "model_specified": model is not None,
+                    "embedding_provider": "lm_studio"
+                },
+                tags=["embedding", "generation", content_type, model or "auto_select"],
+                input_data={
+                    "content_preview": text[:100] + "..." if len(text) > 100 else text,
+                    "content_length": len(text),
+                    "content_type": content_type,
+                    "detected_type": detected_type,
+                    "specified_model": model
+                }
+            )
+        
         try:
             # Auto-select model if not specified
             if model is None:
@@ -174,21 +249,93 @@ class LMStudioVectorizer:
             
             logger.debug(f"Generating embedding with model {model} for {len(text)} chars")
             
+            # Record model selection in trace
+            if langfuse_client.enabled and trace_id:
+                langfuse_client.client.generation(
+                    trace_id=trace_id,
+                    name="model_selection",
+                    model=model,
+                    input={"content_type": content_type, "detected_type": detected_type},
+                    output={"selected_model": model}
+                )
+            
             # Generate embedding using OpenAI-compatible API
+            api_start_time = time.time()
             response = self.client.embeddings.create(
                 input=[text],
                 model=model
             )
+            api_duration = time.time() - api_start_time
             
             embedding = response.data[0].embedding
+            total_duration = time.time() - start_time
             
-            logger.debug(f"Generated embedding with {len(embedding)} dimensions")
+            logger.debug(f"Generated embedding with {len(embedding)} dimensions in {total_duration:.3f}s")
+            
+            # Record successful embedding generation in Langfuse
+            if langfuse_client.enabled and trace_id:
+                langfuse_client.client.trace(
+                    id=trace_id,
+                    output={
+                        "embedding_dimensions": len(embedding),
+                        "model_used": model,
+                        "api_duration_ms": int(api_duration * 1000),
+                        "total_duration_ms": int(total_duration * 1000),
+                        "success": True,
+                        "tokens_processed": len(text.split()),
+                        "chars_per_second": len(text) / total_duration if total_duration > 0 else 0
+                    }
+                )
+                
+                # Score the embedding generation performance
+                # Performance score based on speed (chars/second) and dimension consistency
+                chars_per_second = len(text) / total_duration if total_duration > 0 else 0
+                expected_dimensions = 768  # Common embedding dimension
+                dimension_score = 1.0 if len(embedding) == expected_dimensions else 0.8
+                speed_score = min(1.0, chars_per_second / 1000)  # Normalize to reasonable speed
+                performance_score = (dimension_score + speed_score) / 2
+                
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="embedding_performance",
+                    value=performance_score,
+                    comment=f"Model: {model}, Speed: {chars_per_second:.1f} chars/s, Dims: {len(embedding)}"
+                )
+                
+                # Add efficiency metrics for model comparison
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="embedding_efficiency",
+                    value=chars_per_second / 1000,  # Normalized efficiency metric
+                    comment=f"Processing efficiency for {model}: {chars_per_second:.1f} chars/second"
+                )
             
             return embedding
         
         except Exception as e:
             error_msg = f"Failed to generate embedding with LM Studio: {e}"
             logger.error(error_msg)
+            
+            # Record error in Langfuse
+            if langfuse_client.enabled and trace_id:
+                langfuse_client.client.trace(
+                    id=trace_id,
+                    output={
+                        "success": False,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "model_attempted": model,
+                        "duration_before_error_ms": int((time.time() - start_time) * 1000)
+                    }
+                )
+                
+                # Score as failure
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="embedding_performance",
+                    value=0.0,
+                    comment=f"Failed: {str(e)}"
+                )
             
             if "connection" in str(e).lower():
                 raise VectorizerConnectionError(error_msg)
@@ -218,6 +365,39 @@ class LMStudioVectorizer:
             VectorizerConnectionError: If unable to connect to LM Studio
             VectorizerAPIError: If embedding generation fails
         """
+        langfuse_client = get_langfuse_client()
+        start_time = time.time()
+        
+        # Calculate batch statistics
+        total_chars = sum(len(text) for text in texts)
+        avg_text_length = total_chars / len(texts) if texts else 0
+        
+        # Create Langfuse trace for batch embedding generation
+        trace_id = None
+        if langfuse_client.enabled:
+            trace_id = langfuse_client.create_trace(
+                name="batch_embedding_generation",
+                metadata={
+                    "content_type": content_type,
+                    "detected_type": detected_type,
+                    "batch_size": len(texts),
+                    "total_chars": total_chars,
+                    "avg_text_length": avg_text_length,
+                    "model_specified": model is not None,
+                    "embedding_provider": "lm_studio"
+                },
+                tags=["embedding", "batch", "generation", content_type, f"batch_size_{len(texts)}"],
+                input_data={
+                    "batch_size": len(texts),
+                    "total_chars": total_chars,
+                    "avg_text_length": avg_text_length,
+                    "content_type": content_type,
+                    "detected_type": detected_type,
+                    "specified_model": model,
+                    "sample_texts": [text[:50] + "..." if len(text) > 50 else text for text in texts[:3]]
+                }
+            )
+        
         try:
             # Auto-select model if not specified
             if model is None:
@@ -226,20 +406,98 @@ class LMStudioVectorizer:
             logger.debug(f"Generating {len(texts)} embeddings with model {model}")
             
             # Generate embeddings using batch API
+            api_start_time = time.time()
             response = self.client.embeddings.create(
                 input=texts,
                 model=model
             )
+            api_duration = time.time() - api_start_time
             
             embeddings = [item.embedding for item in response.data]
+            total_duration = time.time() - start_time
             
-            logger.debug(f"Generated {len(embeddings)} embeddings")
+            logger.debug(f"Generated {len(embeddings)} embeddings in {total_duration:.3f}s")
+            
+            # Calculate batch efficiency metrics
+            chars_per_second = total_chars / total_duration if total_duration > 0 else 0
+            embeddings_per_second = len(embeddings) / total_duration if total_duration > 0 else 0
+            avg_embedding_dims = sum(len(emb) for emb in embeddings) / len(embeddings) if embeddings else 0
+            
+            # Record successful batch generation in Langfuse
+            if langfuse_client.enabled and trace_id:
+                langfuse_client.client.trace(
+                    id=trace_id,
+                    output={
+                        "embeddings_generated": len(embeddings),
+                        "avg_embedding_dimensions": avg_embedding_dims,
+                        "model_used": model,
+                        "api_duration_ms": int(api_duration * 1000),
+                        "total_duration_ms": int(total_duration * 1000),
+                        "success": True,
+                        "batch_efficiency": {
+                            "chars_per_second": chars_per_second,
+                            "embeddings_per_second": embeddings_per_second,
+                            "total_chars_processed": total_chars,
+                            "avg_chars_per_embedding": total_chars / len(texts) if texts else 0
+                        }
+                    }
+                )
+                
+                # Score batch processing performance
+                # Batch efficiency bonus for processing multiple items efficiently
+                batch_efficiency = embeddings_per_second * 10  # Scale factor for visibility
+                batch_score = min(1.0, batch_efficiency / 50)  # Normalize to reasonable batch speed
+                
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="batch_embedding_performance",
+                    value=batch_score,
+                    comment=f"Batch: {len(texts)} items, {embeddings_per_second:.1f} emb/s, {chars_per_second:.1f} chars/s"
+                )
+                
+                # Add batch efficiency comparison metric
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="batch_embedding_efficiency",
+                    value=embeddings_per_second / 10,  # Normalized efficiency metric
+                    comment=f"Batch efficiency for {model}: {embeddings_per_second:.1f} embeddings/second"
+                )
+                
+                # Track model performance for comparison
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name=f"model_efficiency_{model.replace('-', '_')}",
+                    value=chars_per_second / 1000,
+                    comment=f"Model-specific efficiency: {chars_per_second:.1f} chars/second"
+                )
             
             return embeddings
         
         except Exception as e:
             error_msg = f"Failed to generate batch embeddings with LM Studio: {e}"
             logger.error(error_msg)
+            
+            # Record error in Langfuse
+            if langfuse_client.enabled and trace_id:
+                langfuse_client.client.trace(
+                    id=trace_id,
+                    output={
+                        "success": False,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "model_attempted": model,
+                        "batch_size": len(texts),
+                        "duration_before_error_ms": int((time.time() - start_time) * 1000)
+                    }
+                )
+                
+                # Score as failure
+                langfuse_client.score_trace(
+                    trace_id=trace_id,
+                    name="batch_embedding_performance",
+                    value=0.0,
+                    comment=f"Batch failed: {str(e)}"
+                )
             
             if "connection" in str(e).lower():
                 raise VectorizerConnectionError(error_msg)
