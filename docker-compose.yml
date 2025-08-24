@@ -30,6 +30,9 @@ services:
       - LOG_LEVEL=INFO
       - LOG_JSON=true
       - ENVIRONMENT=docker
+      - PYTHONPATH=/app
+    extra_hosts:
+      - "devenviro_postgres:172.22.0.7"
       
     # depends_on:
       # Explicit dependency on memOS.as service - temporarily disabled for testing

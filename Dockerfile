@@ -26,15 +26,12 @@ ENV POETRY_NO_INTERACTION=1 \
 
 # Copy poetry files and README
 COPY pyproject.toml poetry.lock* README.md ./
-
-# Install dependencies only (not the project itself yet)  
-RUN poetry install --no-root
-
-# Copy source code
 COPY src/ ./src/
+COPY tests/ ./tests/
 
-# Install the project itself
-RUN poetry install
+# Install dependencies (include dev group for pytest and tooling)
+RUN poetry install --with dev
+RUN pip install langfuse
 
 # Expose port
 EXPOSE 8000
