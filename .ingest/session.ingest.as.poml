@@ -1,0 +1,57 @@
+{
+  "poml_version": "1.0",
+  "session_id": "sess_20250823_phase1_stability",
+  "timestamp": "2025-08-23T15:25:00Z",
+  "objective": "Execute Phase 1: Stability & Foundational Robustness via parallel agent operations to unblock core ecosystem functionality.",
+  "phase": {
+    "name": "Phase 1: Stability & Foundational Robustness",
+    "status": "Initiated"
+  },
+  "delegations": [
+    {
+      "agent_id": "Gemini CLI",
+      "task_id": "P1-GC-01",
+      "priority": "🔥 Critical",
+      "title": "Fix DevEnviro.as Startup Command",
+      "description": "Responsible for all environment and container-level configurations. Correct the startup command in the `docker-compose.yml` file and ensure a `.env.template` is in place for developers.",
+      "dependencies": [],
+      "collaborators": ["Claude Code"]
+    },
+    {
+      "agent_id": "Gemini CLI",
+      "task_id": "P1-GC-02",
+      "priority": "🔥 Critical",
+      "title": "Fix InGest-LLM.as PYTHONPATH",
+      "description": "Correct the PYTHONPATH environment variable directly in the Docker configuration for the InGest-LLM.as service. This is a pure infrastructure fix and is the primary blocker for the service.",
+      "dependencies": [],
+      "collaborators": []
+    },
+    {
+      "agent_id": "Claude Code",
+      "task_id": "P1-CC-01",
+      "priority": "🔥 Critical",
+      "title": "Implement Graceful Handling in DevEnviro.as",
+      "description": "Responsible for the application logic. Implement the graceful error handling mechanism within the FastAPI application to prevent crashes when the `.env` file is missing.",
+      "dependencies": [],
+      "collaborators": ["GitHub Copilot", "Gemini CLI"]
+    },
+    {
+      "agent_id": "Claude Code",
+      "task_id": "P1-CC-02",
+      "priority": "🔥 Critical",
+      "title": "Establish Core Integration Testing Suite",
+      "description": "Write the end-to-end integration test validating the workflow between `InGest-LLM.as` and `memOS.as`. Focus on the test logic, assertions, and service interactions.",
+      "dependencies": ["P1-GC-02"],
+      "collaborators": ["GitHub Copilot"]
+    },
+    {
+      "agent_id": "GitHub Copilot",
+      "task_id": "P1-GHC-01",
+      "priority": "🔥 Critical",
+      "title": "Support Integration Test Development",
+      "description": "Act as the pair programmer for Claude Code on task P1-CC-02. Generate the test file structure, boilerplate for test cases, and mock objects as needed to accelerate test creation.",
+      "dependencies": ["P1-CC-02"],
+      "collaborators": ["Claude Code"]
+    }
+  ]
+}

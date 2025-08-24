@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from .config import settings
 from .models import HealthResponse
 from .api.ingestion import router as ingestion_router
+from .api.repository import router as repository_router
+from .api.ecosystem import router as ecosystem_router
+from .api.analysis import router as analysis_router
 from .observability.setup import setup_observability, get_observability_status
 from .observability.logging import get_logger
 
@@ -20,6 +23,9 @@ setup_observability(app)
 
 # Include API routers
 app.include_router(ingestion_router)
+app.include_router(repository_router)
+app.include_router(ecosystem_router)
+app.include_router(analysis_router)
 
 
 @app.get("/", response_model=dict)

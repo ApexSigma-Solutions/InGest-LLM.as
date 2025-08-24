@@ -59,7 +59,7 @@ def fibonacci(n):
                 content_type=sample['content_type']
             )
             
-            print(f"Processing successful!")
+            print("Processing successful!")
             print(f"   Chunks created: {len(result['chunks'])}")
             print(f"   Embeddings generated: {result['processing_stats']['embeddings_generated']}")
             print(f"   Embedding enabled: {result['processing_stats']['embedding_enabled']}")

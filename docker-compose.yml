@@ -7,6 +7,10 @@ services:
     env_file:
       - .env
     environment:
+      # Langfuse observability integration
+      - LANGFUSE_PUBLIC_KEY=pk-lf-f58be3ee-e274-4bf1-8ffe-4df7e9fcf61e
+      - LANGFUSE_SECRET_KEY=sk-lf-1d26cfb7-fcaf-4fdf-830e-a9ae4d32d7fa
+      - LANGFUSE_HOST=https://cloud.langfuse.com
       # memOS.as integration - use container name for internal networking
       - INGEST_MEMOS_BASE_URL=http://devenviro_memos_api:8090
       - INGEST_MEMOS_TIMEOUT=30
@@ -26,13 +30,16 @@ services:
       - LOG_LEVEL=INFO
       - LOG_JSON=true
       - ENVIRONMENT=docker
+      - PYTHONPATH=/app
+    extra_hosts:
+      - "devenviro_postgres:172.22.0.7"
       
     # depends_on:
       # Explicit dependency on memOS.as service - temporarily disabled for testing
       # - memos-api-external
       
     networks:
-      - devenviroas_default
+      - apexsigma_net
       
     restart: unless-stopped
     
@@ -50,7 +57,7 @@ services:
     container_name: devenviro_memos_dependency_check
     command: echo "memOS.as dependency check - this should be running externally"
     networks:
-      - devenviroas_default
+      - apexsigma_net
     
   # Integration test runner service
   test-runner:
@@ -64,14 +71,14 @@ services:
       - INGEST_MEMOS_BASE_URL=http://devenviro_memos_api:8090
       - TEST_MODE=integration
     networks:
-      - devenviroas_default
+      - apexsigma_net
     depends_on:
       - ingest-llm-api
-    command: ["pytest", "-v", "/app/tests/", "-m", "integration"]
+    command: ["poetry", "run", "pytest", "-v", "/app/tests/", "-m", "integration"]
     profiles:
       - testing  # Only run when explicitly requested
 
 # Use the existing DevEnviro network for service communication
 networks:
-  devenviroas_default:
+  apexsigma_net:
     external: true

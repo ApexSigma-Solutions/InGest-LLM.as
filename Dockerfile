@@ -26,18 +26,15 @@ ENV POETRY_NO_INTERACTION=1 \
 
 # Copy poetry files and README
 COPY pyproject.toml poetry.lock* README.md ./
-
-# Install dependencies only (not the project itself yet)  
-RUN poetry install --only=main --no-root
-
-# Copy source code
 COPY src/ ./src/
+COPY tests/ ./tests/
 
-# Install the project itself
-RUN poetry install --only-root
+# Install dependencies (include dev group for pytest and tooling)
+RUN poetry install --with dev
+RUN pip install langfuse
 
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["poetry", "run", "uvicorn", "src.ingest_llm_as.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use Poetry's environment directly
+CMD ["poetry", "run", "python", "-m", "uvicorn", "src.ingest_llm_as.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -6,11 +6,13 @@ and storing content in the memOS.as memory system.
 """
 
 import time
+import traceback
 from typing import List, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
+from ..config import settings
 from ..models import (
     IngestionRequest,
     IngestionResponse,
@@ -18,19 +20,28 @@ from ..models import (
     ProcessingStatus,
     MemoryTier,
 )
-from ..services.memos_client import (
+from ..observability.langfuse_client import get_langfuse_client
+from ..observability.logging import (
+    get_logger,
+    log_ingestion_start,
+    log_ingestion_complete,
+)
+from ..observability.metrics import (
+    record_ingestion_start,
+    record_ingestion_complete,
+)
+from ..observability.tracing import add_span_attributes
+from ..utils.content_processor import (
+    ContentProcessor,
+    create_ingestion_metadata,
+)
+from ingest_llm_as.services.memos_client import (
     get_memos_client,
     MemOSClient,
     MemOSConnectionError,
     MemOSAPIError,
     generate_content_hash,
 )
-from ..utils.content_processor import ContentProcessor, create_ingestion_metadata
-from ..config import settings
-from ..observability.logging import get_logger, log_ingestion_start, log_ingestion_complete
-from ..observability.metrics import record_ingestion_start, record_ingestion_complete
-from ..observability.tracing import add_span_attributes
-from ..observability.langfuse_client import get_langfuse_client
 
 logger = get_logger(__name__)
 
@@ -62,11 +73,11 @@ async def ingest_text(
     """
     start_time = time.time()
     ingestion_id = uuid4()
-    
+
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
     trace_id = None
-    
+
     if langfuse_client.enabled:
         trace_id = langfuse_client.create_trace(
             name="text_ingestion",
@@ -76,26 +87,38 @@ async def ingest_text(
                 "content_size": len(request.content),
                 "source_type": request.metadata.source.value,
                 "process_async": request.process_async,
-                "endpoint": "/ingest/text"
+                "endpoint": "/ingest/text",
             },
             tags=["ingestion", "text", request.metadata.content_type.value],
             input_data={
-                "content_preview": request.content[:200] + "..." if len(request.content) > 200 else request.content,
+                "content_preview": request.content[:200] + "..."
+                if len(request.content) > 200
+                else request.content,
                 "metadata": request.metadata.model_dump(),
-                "chunk_size": request.chunk_size
-            }
+                "chunk_size": request.chunk_size,
+            },
         )
 
     # Record metrics and logging
-    record_ingestion_start("/ingest/text", request.metadata.content_type.value, len(request.content))
-    log_ingestion_start(logger, str(ingestion_id), request.metadata.content_type.value, len(request.content), request.metadata.model_dump())
-    
+    record_ingestion_start(
+        "/ingest/text",
+        request.metadata.content_type.value,
+        len(request.content),
+    )
+    log_ingestion_start(
+        logger,
+        str(ingestion_id),
+        request.metadata.content_type.value,
+        len(request.content),
+        request.metadata.model_dump(),
+    )
+
     # Add tracing attributes
     add_span_attributes(
         ingestion_id=str(ingestion_id),
         content_type=request.metadata.content_type.value,
         content_size=len(request.content),
-        source_type=request.metadata.source.value
+        source_type=request.metadata.source.value,
     )
 
     try:
@@ -111,34 +134,62 @@ async def ingest_text(
 
         # Check memOS.as connectivity
         if not await memos_client.health_check():
-            raise HTTPException(status_code=503, detail="memOS.as service unavailable")
+            raise HTTPException(
+                status_code=503, detail="memOS.as service unavailable"
+            )
 
-        # Process content with embeddings (implements TASK-IG-16)
-        processing_result = await processor.process_content_with_embeddings(
-            content=request.content,
-            content_type=request.metadata.content_type.value
+        # Detect content type for intelligent processing
+        detected_type = processor.detect_content_type(
+            content=request.content, file_path=request.metadata.source_url
         )
-        
+
+        # Process content with embeddings - use AST parser for Python code
+        if (
+            detected_type == "python"
+            or request.metadata.content_type.value == "code"
+        ):
+            processing_result = (
+                await processor.process_python_code_with_embeddings(
+                    source_code=request.content,
+                    file_path=request.metadata.source_url,
+                    content_type=request.metadata.content_type.value,
+                )
+            )
+        else:
+            processing_result = (
+                await processor.process_content_with_embeddings(
+                    content=request.content,
+                    content_type=request.metadata.content_type.value,
+                    detected_type=detected_type,
+                )
+            )
+
         chunks = processing_result["chunks"]
         embeddings = processing_result["embeddings"]
         processing_stats = processing_result["processing_stats"]
 
         if not chunks:
             raise HTTPException(
-                status_code=400, detail="No valid content chunks could be created"
+                status_code=400,
+                detail="No valid content chunks could be created",
             )
 
         logger.info(
-            f"Created {len(chunks)} chunks for ingestion {ingestion_id}", 
+            f"Created {len(chunks)} chunks for ingestion {ingestion_id}",
             embeddings_generated=processing_stats["embeddings_generated"],
-            embedding_enabled=processing_stats["embedding_enabled"]
+            embedding_enabled=processing_stats["embedding_enabled"],
         )
 
         # Process synchronously or asynchronously based on request
         if request.process_async and settings.enable_async_processing:
             # Queue for background processing
             background_tasks.add_task(
-                _process_chunks_async, chunks, embeddings, request, ingestion_id, processor
+                _process_chunks_async,
+                chunks,
+                embeddings,
+                request,
+                ingestion_id,
+                processor,
             )
 
             # Return immediate response
@@ -155,7 +206,9 @@ async def ingest_text(
             )
 
             # Determine overall status
-            failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
+            failed_results = [
+                r for r in results if r.status == ProcessingStatus.FAILED
+            ]
             overall_status = (
                 ProcessingStatus.FAILED
                 if failed_results
@@ -173,24 +226,24 @@ async def ingest_text(
 
         # Record completion metrics and logging
         duration_ms = int((time.time() - start_time) * 1000)
-        chunks_count = len(getattr(response, 'results', []))
-        
+        chunks_count = len(getattr(response, "results", []))
+
         record_ingestion_complete(
-            "/ingest/text", 
-            request.metadata.content_type.value, 
-            duration_ms / 1000, 
+            "/ingest/text",
+            request.metadata.content_type.value,
+            duration_ms / 1000,
             response.status.value,
-            chunks_count
+            chunks_count,
         )
-        
+
         log_ingestion_complete(
-            logger, 
-            str(ingestion_id), 
-            response.status.value, 
-            duration_ms, 
-            chunks_count
+            logger,
+            str(ingestion_id),
+            response.status.value,
+            duration_ms,
+            chunks_count,
         )
-        
+
         # Update Langfuse trace with completion data
         if langfuse_client.enabled and trace_id:
             langfuse_client.client.trace(
@@ -199,35 +252,49 @@ async def ingest_text(
                     "status": response.status.value,
                     "total_chunks": response.total_chunks,
                     "processing_time_ms": duration_ms,
-                    "chunks_processed": chunks_count
-                }
+                    "chunks_processed": chunks_count,
+                },
             )
-            
+
             # Add quality score based on success rate
-            success_rate = 1.0 if response.status == ProcessingStatus.COMPLETED else 0.0
+            success_rate = (
+                1.0 if response.status == ProcessingStatus.COMPLETED else 0.0
+            )
             if response.results:
-                failed_count = len([r for r in response.results if r.status == ProcessingStatus.FAILED])
-                success_rate = (len(response.results) - failed_count) / len(response.results)
-            
+                failed_count = len(
+                    [
+                        r
+                        for r in response.results
+                        if r.status == ProcessingStatus.FAILED
+                    ]
+                )
+                success_rate = (len(response.results) - failed_count) / len(
+                    response.results
+                )
+
             langfuse_client.score_trace(
                 trace_id=trace_id,
                 name="ingestion_success_rate",
                 value=success_rate,
-                comment=f"Ingestion completed with {chunks_count} chunks processed"
+                comment=f"Ingestion completed with {chunks_count} chunks processed",
             )
-        
+
         return response
 
     except HTTPException:
         raise
     except MemOSConnectionError as e:
-        logger.error(f"memOS.as connection error in ingestion {ingestion_id}: {e}")
+        logger.error(
+            f"memOS.as connection error in ingestion {ingestion_id}: {e}"
+        )
         raise HTTPException(
             status_code=503, detail="Memory storage service unavailable"
         )
     except MemOSAPIError as e:
         logger.error(f"memOS.as API error in ingestion {ingestion_id}: {e}")
-        raise HTTPException(status_code=502, detail="Memory storage service error")
+        raise HTTPException(
+            status_code=502, detail="Memory storage service error"
+        )
     except Exception as e:
         logger.error(f"Unexpected error in ingestion {ingestion_id}: {e}")
         raise HTTPException(
@@ -261,7 +328,7 @@ async def _process_chunks_sync(
         try:
             # Get corresponding embedding for this chunk
             embedding = embeddings[i] if i < len(embeddings) else None
-            
+
             result = await _process_single_chunk(
                 chunk=chunk,
                 chunk_index=i,
@@ -274,7 +341,10 @@ async def _process_chunks_sync(
             results.append(result)
 
         except Exception as e:
-            logger.error(f"Error processing chunk {i}: {e}")
+            # Capture full traceback and error type to aid debugging
+            logger.error(
+                f"Error processing chunk {i}: {e} ({type(e).__name__})\n{traceback.format_exc()}"
+            )
 
             # Create failed result
             result = IngestionResult(
@@ -282,7 +352,7 @@ async def _process_chunks_sync(
                 content_hash=generate_content_hash(chunk),
                 chunk_size=len(chunk),
                 status=ProcessingStatus.FAILED,
-                error_message=str(e),
+                error_message=f"{type(e).__name__}: {e}",
             )
             results.append(result)
 
@@ -293,7 +363,7 @@ async def _process_chunks_async(
     chunks: List[str],
     embeddings: List[Optional[List[float]]],
     request: IngestionRequest,
-    ingestion_id: uuid4,
+    ingestion_id: UUID,
     processor: ContentProcessor,
 ):
     """
@@ -309,7 +379,8 @@ async def _process_chunks_async(
     logger.info(f"Starting async processing for ingestion {ingestion_id}")
 
     try:
-        async with get_memos_client() as memos_client:
+        # Use a fresh client context to avoid un-awaited coroutine issues
+        async with MemOSClient() as memos_client:
             await _process_chunks_sync(
                 chunks, embeddings, request, processor, memos_client
             )
@@ -318,7 +389,9 @@ async def _process_chunks_async(
         logger.info(f"Async processing completed for ingestion {ingestion_id}")
 
     except Exception as e:
-        logger.error(f"Async processing failed for ingestion {ingestion_id}: {e}")
+        logger.error(
+            f"Async processing failed for ingestion {ingestion_id}: {e}"
+        )
 
 
 async def _process_single_chunk(
@@ -363,27 +436,30 @@ async def _process_single_chunk(
 
     # Store in memOS.as with embedding
     storage_response = await memos_client.store_memory(
-        content=chunk, 
-        memory_tier=memory_tier, 
+        content=chunk,
+        memory_tier=memory_tier,
         metadata=storage_metadata,
-        embedding=embedding
+        embedding=embedding,
     )
 
     # Create result - handle case where memory_id may not be returned
     result_memory_id = None
-    if hasattr(storage_response, 'memory_id') and storage_response.memory_id:
-        result_memory_id = UUID(int=storage_response.memory_id) if isinstance(storage_response.memory_id, int) else storage_response.memory_id
-    
+    if hasattr(storage_response, "memory_id") and storage_response.memory_id:
+        # memOS.as returns integer memory_id, use it directly
+        result_memory_id = storage_response.memory_id
+
     return IngestionResult(
         memory_id=result_memory_id,
         memory_tier=memory_tier,
         content_hash=content_hash,
         chunk_size=len(chunk),
-        status=ProcessingStatus.COMPLETED if storage_response.success else ProcessingStatus.FAILED,
+        status=ProcessingStatus.COMPLETED
+        if storage_response.success
+        else ProcessingStatus.FAILED,
     )
 
 
-def _determine_memory_tier(content_type: str) -> MemoryTier:
+def _determine_memory_tier(content_type) -> MemoryTier:
     """
     Determine appropriate memory tier for content type.
 
@@ -394,15 +470,29 @@ def _determine_memory_tier(content_type: str) -> MemoryTier:
         MemoryTier: Appropriate memory tier
     """
     # Simple mapping for now - can be enhanced with ML-based classification
+    # Normalize to a lowercase string whether enum or str
+    try:
+        ct_str = (
+            content_type.value
+            if hasattr(content_type, "value")
+            else str(content_type)
+        )
+        ct_str = ct_str.lower()
+    except Exception:
+        ct_str = "text"
+
     tier_mapping = {
         "text": MemoryTier.SEMANTIC,
         "documentation": MemoryTier.SEMANTIC,
         "markdown": MemoryTier.SEMANTIC,
         "code": MemoryTier.PROCEDURAL,
         "json": MemoryTier.SEMANTIC,
+        # Add common aliases
+        "python": MemoryTier.PROCEDURAL,
+        "source_code": MemoryTier.PROCEDURAL,
     }
 
-    return tier_mapping.get(content_type.lower(), MemoryTier.SEMANTIC)
+    return tier_mapping.get(ct_str, MemoryTier.SEMANTIC)
 
 
 @router.get("/status/{ingestion_id}")

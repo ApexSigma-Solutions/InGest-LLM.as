@@ -117,14 +117,17 @@ class MemOSClient:
         try:
             # Map memory tier enum to numeric format expected by memOS.as
             tier_mapping = {
-                MemoryTier.WORKING: "1",      # Working memory
-                MemoryTier.EPISODIC: "2",     # Episodic memory  
-                MemoryTier.SEMANTIC: "3",     # Semantic memory
-                MemoryTier.PROCEDURAL: "1",   # Map procedural to working for now
+                MemoryTier.WORKING: "1",  # Working memory (Redis)
+                MemoryTier.EPISODIC: "2",  # Episodic memory (Postgres + Qdrant)
+                MemoryTier.SEMANTIC: "3",  # Semantic memory (Neo4j)
+                # Route procedural/code content to Tier 2 (Postgres + Qdrant)
+                MemoryTier.PROCEDURAL: "2",
             }
-            
-            tier_number = tier_mapping.get(memory_tier, "3")  # Default to semantic
-            
+
+            tier_number = tier_mapping.get(
+                memory_tier, "3"
+            )  # Default to semantic
+
             # Prepare storage request
             storage_request = MemoryStorageRequest(
                 content=content,

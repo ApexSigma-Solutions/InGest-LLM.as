@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "InGest-LLM.as"
     app_version: str = "0.1.0"
     debug: bool = False
+    hello: Optional[str] = None  # Development setting
 
     # Server configuration
     host: str = "0.0.0.0"
@@ -42,6 +43,19 @@ class Settings(BaseSettings):
     embedding_enabled: bool = True
     embedding_batch_size: int = 10
     embedding_dimension: int = 768  # Default for nomic-embed models
+
+    # Observability
+    jaeger_endpoint: str = "http://devenviro_jaeger:14268/api/traces"
+    log_level: str = "INFO"
+    log_json: bool = True
+    environment: str = "docker"
+    
+    # Langfuse observability integration
+    langfuse_public_key: Optional[str] = None
+    langfuse_secret_key: Optional[str] = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_api_key_public: Optional[str] = None  # Alternative naming
+    langfuse_api_key_secret: Optional[str] = None  # Alternative naming
 
     class Config:
         env_file = ".env"

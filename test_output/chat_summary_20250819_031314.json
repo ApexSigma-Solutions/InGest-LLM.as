@@ -1,0 +1,167 @@
+{
+  "session_id": "chat_summary_20250819_031314",
+  "generated_at": "2025-08-19T03:13:14.796353",
+  "source_file": "test_chat_sample.txt",
+  "source_hash": "00a8746551c65790",
+  "analysis": {
+    "content_type": "text",
+    "total_lines": 19,
+    "total_words": 110,
+    "total_characters": 798,
+    "estimated_reading_time_minutes": 0.55
+  },
+  "technical_keywords": {
+    "docker": 3,
+    "network": 5,
+    "container": 7,
+    "apexsigma": 2,
+    "memos": 2,
+    "ingest": 1,
+    "integration": 2,
+    "error": 0,
+    "success": 2,
+    "test": 3
+  },
+  "important_sections": [
+    {
+      "line_number": 12,
+      "content": "SUCCESS: Network integration working after fixing docker-compose.yml"
+    },
+    {
+      "line_number": 13,
+      "content": "\u2705 All containers now communicating properly"
+    },
+    {
+      "line_number": 14,
+      "content": "\u274c Some minor issues with Unicode display"
+    },
+    {
+      "line_number": 19,
+      "content": "Integration test completed successfully with full container communication."
+    }
+  ],
+  "environment_snapshot": {
+    "timestamp": "2025-08-19T03:13:14.796212",
+    "session_id": "chat_summary_20250819_031314",
+    "environment": {
+      "git_changes": [
+        "M .env",
+        " M .env.example",
+        " M .ingest/beta.ingest.as.json",
+        " M .md/.project/plan.project.as.md",
+        " M .md/.project/task.project.as.md",
+        " D docker-compose.README.md",
+        " M docker-compose.yml",
+        " M poetry.lock",
+        " M pyproject.toml",
+        " M src/ingest_llm_as/__pycache__/config.cpython-313.pyc",
+        " M src/ingest_llm_as/__pycache__/main.cpython-313.pyc",
+        " M src/ingest_llm_as/__pycache__/models.cpython-313.pyc",
+        " M src/ingest_llm_as/api/__pycache__/ingestion.cpython-313.pyc",
+        " M src/ingest_llm_as/api/ingestion.py",
+        " M src/ingest_llm_as/config.py",
+        " M src/ingest_llm_as/main.py",
+        " M src/ingest_llm_as/models.py",
+        " M src/ingest_llm_as/services/__pycache__/memos_client.cpython-313.pyc",
+        " M src/ingest_llm_as/services/__pycache__/vectorizer.cpython-313.pyc",
+        " M src/ingest_llm_as/services/vectorizer.py",
+        " M src/ingest_llm_as/utils/__pycache__/content_processor.cpython-313.pyc",
+        " M src/ingest_llm_as/utils/content_processor.py",
+        " M tests/__pycache__/test_ingestion_e2e.cpython-313-pytest-8.4.1.pyc",
+        " D tests/test_embedding_integration.py",
+        " M tests/test_ingestion_e2e.py",
+        "?? \".ingest/High-Level Task List 18082025.md\"",
+        "?? .ingest/constrat.poml.ingest.as.md",
+        "?? .md/.persist/",
+        "?? .md/.projects/",
+        "?? .md/tools/",
+        "?? context_bullet_test.md",
+        "?? context_portal/",
+        "?? docs/",
+        "?? integration/",
+        "?? prompts/",
+        "?? scripts/",
+        "?? src/ingest_llm_as/api/__pycache__/repository.cpython-313.pyc",
+        "?? src/ingest_llm_as/api/analysis.py",
+        "?? src/ingest_llm_as/api/ecosystem.py",
+        "?? src/ingest_llm_as/api/repository.py",
+        "?? src/ingest_llm_as/parsers/",
+        "?? src/ingest_llm_as/services/__pycache__/ecosystem_ingestion.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/__pycache__/llm_cache.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/__pycache__/nomic_code_analyzer.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/__pycache__/project_analyzer.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/__pycache__/project_documentation_generator.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/__pycache__/repository_processor.cpython-313.pyc",
+        "?? src/ingest_llm_as/services/ecosystem_ingestion.py",
+        "?? src/ingest_llm_as/services/llm_cache.py",
+        "?? src/ingest_llm_as/services/nomic_code_analyzer.py",
+        "?? src/ingest_llm_as/services/progress_logger.py",
+        "?? src/ingest_llm_as/services/project_analyzer.py",
+        "?? src/ingest_llm_as/services/project_documentation_generator.py",
+        "?? src/ingest_llm_as/services/repository_processor.py",
+        "?? test_chat_sample.txt",
+        "?? test_chat_summarizer.py",
+        "?? tests/__pycache__/test_embedding_integration.cpython-313-pytest-8.4.1.pyc",
+        "?? tests/embedding_integration_demo.py",
+        "?? tests/test_ecosystem_ingestion.py",
+        "?? tests/test_nomic_embeddings.py",
+        "?? tests/test_qwen_integration.py"
+      ],
+      "recent_commits": [
+        "7c4dccd feat: complete Milestone 2 Objective 1 - End-to-End Service Integration",
+        "e915560 feat: implement comprehensive ingestion pipeline with full observability",
+        "5b71cbf feat: implement Docker containerization and FastAPI foundation",
+        "9872e20 Initial commit"
+      ],
+      "running_containers": [
+        "NAMES                      STATUS                 PORTS",
+        "devenviro_api              Up 2 hours             0.0.0.0:8090->8090/tcp, [::]:8090->8090/tcp",
+        "devenviro_grafana          Up 2 hours             0.0.0.0:8080->3000/tcp, [::]:8080->3000/tcp",
+        "devenviro_promtail         Up 2 hours             ",
+        "devenviro_redis            Up 2 hours             0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp",
+        "devenviro_prometheus       Up 2 hours             0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp",
+        "devenviro_docs             Up 2 hours             0.0.0.0:8001->8000/tcp, [::]:8001->8000/tcp",
+        "devenviro_rabbitmq         Up 2 hours             0.0.0.0:5672->5672/tcp, [::]:5672->5672/tcp, 0.0.0.0:15672->15672/tcp, [::]:15672->15672/tcp",
+        "devenviro_postgres         Up 2 hours             0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp",
+        "devenviro_qdrant           Up 2 hours             0.0.0.0:6333-6334->6333-6334/tcp, [::]:6333-6334->6333-6334/tcp",
+        "devenviro_loki             Up 2 hours             0.0.0.0:3101->3100/tcp, [::]:3101->3100/tcp",
+        "devenviro_jaeger           Up 2 hours             0.0.0.0:14268->14268/tcp, [::]:14268->14268/tcp, 0.0.0.0:16686->16686/tcp, [::]:16686->16686/tcp",
+        "toolsas-app-1              Up 2 hours (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp",
+        "toolsas-db-1               Up 2 hours (healthy)   0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp",
+        "devenviro_ingest_llm_api   Up 2 hours (healthy)   0.0.0.0:8002->8000/tcp, [::]:8002->8000/tcp",
+        "devenviro_memos_api        Up 2 hours             0.0.0.0:8091->8090/tcp, [::]:8091->8090/tcp",
+        "neo4j-memtank              Up 9 hours             0.0.0.0:7474->7474/tcp, [::]:7474->7474/tcp, 0.0.0.0:7687->7687/tcp, [::]:7687->7687/tcp"
+      ],
+      "network_containers": [
+        "devenviro_postgres",
+        "devenviro_rabbitmq",
+        "devenviro_jaeger",
+        "devenviro_prometheus",
+        "devenviro_loki",
+        "toolsas-app-1",
+        "devenviro_memos_api",
+        "neo4j-memtank",
+        "devenviro_ingest_llm_api",
+        "toolsas-db-1",
+        "devenviro_api",
+        "devenviro_promtail",
+        "devenviro_qdrant",
+        "devenviro_redis",
+        "devenviro_grafana",
+        "devenviro_docs"
+      ],
+      "python_version": "3.13.6 (tags/v3.13.6:4e66535, Aug  6 2025, 14:36:00) [MSC v.1944 64 bit (AMD64)]",
+      "working_directory": "C:\\Users\\steyn\\ApexSigmaProjects.Dev\\InGest-LLM.as"
+    },
+    "apexsigma_status": {
+      "containers_running": 15,
+      "network_unified": false,
+      "integration_ready": true
+    }
+  },
+  "summary_text": "Chat Thread Summary:\n\nContent: 110 words across 19 lines\nReading Time: ~0.6 minutes\n\nKey Topics: container (7), network (5), docker (3)\n\nImportant Activities:\n- Line 12: SUCCESS: Network integration working after fixing docker-compose.yml\n- Line 13: \u2705 All containers now communicating properly\n- Line 14: \u274c Some minor issues with Unicode display\n- Line 19: Integration test completed successfully with full container communication.",
+  "recommendations": [
+    "ApexSigma ecosystem is operational - good time for integration testing",
+    "Many uncommitted changes - consider creating a checkpoint commit"
+  ]
+}
