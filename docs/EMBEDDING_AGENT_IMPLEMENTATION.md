@@ -1,3 +1,12 @@
+# ⚠️ HISTORICAL DOCUMENT - Embedding Agent Implementation Plan
+
+> **⚠️ STATUS: SUPERSEDED**  
+> **Date**: August 25, 2025  
+> **Current Implementation**: This standalone microservice has been **successfully integrated into InGest-LLM.as** as `vectorizer.py`  
+> **See**: `EMBEDDING_INTEGRATION_COMPLETE.md` for current implementation details  
+
+---
+
 # Embedding Agent Implementation Plan
 
 **Date**: 2025-08-24  

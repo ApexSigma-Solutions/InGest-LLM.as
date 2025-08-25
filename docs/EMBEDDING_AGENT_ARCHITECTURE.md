@@ -1,3 +1,12 @@
+# ⚠️ HISTORICAL DOCUMENT - Embedding Agent Architecture Design
+
+> **⚠️ STATUS: SUPERSEDED**  
+> **Date**: August 25, 2025  
+> **Current Implementation**: This standalone microservice design has been **successfully integrated into InGest-LLM.as** as `vectorizer.py`  
+> **See**: `EMBEDDING_INTEGRATION_COMPLETE.md` for current architecture  
+
+---
+
 # Embedding Agent Architecture Design
 
 **Date**: 2025-08-24  
