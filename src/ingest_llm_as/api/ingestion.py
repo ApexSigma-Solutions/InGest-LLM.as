@@ -417,46 +417,69 @@ async def _process_single_chunk(
     Returns:
         IngestionResult: Processing result for this chunk
     """
-    # Generate content hash for deduplication
-    content_hash = generate_content_hash(chunk)
+    try:
+        print(f"DEBUG: Processing chunk {chunk_index}, starting...")
 
-    # Extract additional metadata from content
-    content_metadata = processor.extract_metadata_from_content(chunk)
+        # Generate content hash for deduplication
+        content_hash = generate_content_hash(chunk)
+        print(f"DEBUG: Generated content hash: {content_hash}")
 
-    # Create comprehensive metadata
-    storage_metadata = create_ingestion_metadata(
-        original_metadata=request.metadata.model_dump(),
-        chunk_index=chunk_index,
-        total_chunks=total_chunks,
-        processing_info=content_metadata,
-    )
+        # Extract additional metadata from content
+        content_metadata = processor.extract_metadata_from_content(chunk)
+        print(f"DEBUG: Extracted content metadata")
 
-    # Determine memory tier based on content type and metadata
-    memory_tier = _determine_memory_tier(request.metadata.content_type)
+        # Create comprehensive metadata
+        storage_metadata = create_ingestion_metadata(
+            original_metadata=request.metadata.model_dump(),
+            chunk_index=chunk_index,
+            total_chunks=total_chunks,
+            processing_info=content_metadata,
+        )
+        print(f"DEBUG: Created storage metadata")
 
-    # Store in memOS.as with embedding
-    storage_response = await memos_client.store_memory(
-        content=chunk,
-        memory_tier=memory_tier,
-        metadata=storage_metadata,
-        embedding=embedding,
-    )
+        # Determine memory tier based on content type and metadata
+        memory_tier = _determine_memory_tier(request.metadata.content_type)
+        print(f"DEBUG: Determined memory tier: {memory_tier}")
 
-    # Create result - handle case where memory_id may not be returned
-    result_memory_id = None
-    if hasattr(storage_response, "memory_id") and storage_response.memory_id:
-        # memOS.as returns integer memory_id, use it directly
-        result_memory_id = storage_response.memory_id
+        # Store in memOS.as with embedding
+        print(f"DEBUG: About to call memos_client.store_memory")
+        storage_response = await memos_client.store_memory(
+            content=chunk,
+            memory_tier=memory_tier,
+            metadata=storage_metadata,
+            embedding=embedding,
+        )
+        print(f"DEBUG: memOS storage completed successfully")
 
-    return IngestionResult(
-        memory_id=result_memory_id,
-        memory_tier=memory_tier,
-        content_hash=content_hash,
-        chunk_size=len(chunk),
-        status=ProcessingStatus.COMPLETED
-        if storage_response.success
-        else ProcessingStatus.FAILED,
-    )
+        # Create result - handle case where memory_id may not be returned
+        result_memory_id = None
+        if (
+            hasattr(storage_response, "memory_id")
+            and storage_response.memory_id
+        ):
+            # memOS.as returns integer memory_id, use it directly
+            result_memory_id = storage_response.memory_id
+
+        print(f"DEBUG: About to create IngestionResult")
+        result = IngestionResult(
+            memory_id=result_memory_id,
+            memory_tier=memory_tier,
+            content_hash=content_hash,
+            chunk_size=len(chunk),
+            status=ProcessingStatus.COMPLETED
+            if storage_response.success
+            else ProcessingStatus.FAILED,
+        )
+        print(f"DEBUG: Created IngestionResult successfully")
+        return result
+
+    except Exception as e:
+        print(f"DEBUG: Exception occurred in _process_single_chunk: {e}")
+        print(f"DEBUG: Exception type: {type(e).__name__}")
+        import traceback
+
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise
 
 
 def _determine_memory_tier(content_type) -> MemoryTier:

@@ -1,43 +1,42 @@
+"""Langfuse decorator smoke test (skips if env not configured)."""
+
 import os
+import pytest
 from langfuse import Langfuse
 from langfuse.decorators import observe
 
-# This script tests the connection to Langfuse using the @observe decorator
 
-# Get credentials from environment variables
-public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
-secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
-host = os.environ.get("LANGFUSE_HOST")
+@pytest.mark.integration
+def test_langfuse_decorator_or_skip() -> None:
+    """Test Langfuse decorator when env is set; otherwise skip."""
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+    host = os.environ.get("LANGFUSE_HOST")
 
-# Check if all credentials are set
-if not all([public_key, secret_key, host]):
-    print("Error: Langfuse environment variables not set.")
-    exit(1)
+    if not all([public_key, secret_key, host]):
+        pytest.skip("Langfuse environment variables not set")
 
-# Initialize Langfuse client
-try:
-    langfuse = Langfuse(
-        public_key=public_key,
-        secret_key=secret_key,
-        host=host
-    )
-    print("Langfuse client initialized successfully.")
-except Exception as e:
-    print(f"Error initializing Langfuse client: {e}")
-    exit(1)
+    # Initialize Langfuse client
+    try:
+        langfuse = Langfuse(
+            public_key=public_key,
+            secret_key=secret_key,
+            host=host,
+        )
+    except Exception as e:
+        pytest.fail(f"Error initializing Langfuse client: {e}")
 
-@observe()
-def my_llm_feature():
-    print("Executing my_llm_feature")
+    @observe()
+    def my_llm_feature() -> str:
+        """Test function with Langfuse decorator."""
+        return "LLM feature executed"
 
-# Test the connection by calling the decorated function
-try:
-    my_llm_feature()
-    print("Successfully executed decorated function.")
-except Exception as e:
-    print(f"Error executing decorated function: {e}")
-    exit(1)
+    # Test decorated function
+    try:
+        result = my_llm_feature()
+        assert result == "LLM feature executed"
+    except Exception as e:
+        pytest.fail(f"Error executing decorated function: {e}")
 
-# Flush the client to ensure the event is sent
-langfuse.flush()
-print("Langfuse client flushed.")
+    # Flush events
+    langfuse.flush()

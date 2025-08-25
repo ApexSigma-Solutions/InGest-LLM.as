@@ -15,6 +15,7 @@ from typing import List, Optional, Tuple
 from dataclasses import dataclass
 from collections import defaultdict
 import fnmatch
+from uuid import UUID
 
 from ..models import (
     RepositoryIngestionRequest,

@@ -127,6 +127,9 @@ class TestTextIngestion:
             assert response.status_code == 200
             ingestion_response = response.json()
 
+            # Debug: Print response to understand the failure
+            print(f"Text ingestion response: {ingestion_response}")
+
             # Validate ingestion response structure
             assert "ingestion_id" in ingestion_response
             assert "status" in ingestion_response

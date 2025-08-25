@@ -8,6 +8,7 @@ memory storage system.
 import hashlib
 import logging
 from typing import Dict, List, Optional
+from uuid import UUID, uuid4
 
 import httpx
 from pydantic import ValidationError
