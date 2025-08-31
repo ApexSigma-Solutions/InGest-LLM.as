@@ -8,7 +8,6 @@ embeddings using local models (nomic-embed-text, nomic-embed-code).
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import time
-from uuid import UUID, uuid4
 
 import numpy as np
 from openai import OpenAI
@@ -104,20 +103,14 @@ class LMStudioVectorizer:
         try:
             if self._available_models is None:
                 models_response = self.client.models.list()
-                self._available_models = [
-                    model.id for model in models_response.data
-                ]
-                logger.info(
-                    f"Available LM Studio models: {self._available_models}"
-                )
+                self._available_models = [model.id for model in models_response.data]
+                logger.info(f"Available LM Studio models: {self._available_models}")
 
             return self._available_models
 
         except Exception as e:
             logger.error(f"Failed to get available models from LM Studio: {e}")
-            raise VectorizerConnectionError(
-                f"Unable to connect to LM Studio: {e}"
-            )
+            raise VectorizerConnectionError(f"Unable to connect to LM Studio: {e}")
 
     def select_model_for_content(
         self, content_type: str, detected_type: str = None
@@ -172,10 +165,7 @@ class LMStudioVectorizer:
                 logger.debug(f"Selected {selected_model} for code content")
 
         # For text, documentation, markdown
-        if (
-            not selected_model
-            and EmbeddingModelType.TEXT.value in available_models
-        ):
+        if not selected_model and EmbeddingModelType.TEXT.value in available_models:
             selected_model = EmbeddingModelType.TEXT.value
             selection_reason = "text_specialized_model_available"
             logger.debug(f"Selected {selected_model} for text content")
@@ -192,9 +182,7 @@ class LMStudioVectorizer:
         if not selected_model:
             selected_model = EmbeddingModelType.GENERAL.value
             selection_reason = "final_fallback_model"
-            logger.warning(
-                "No specialized models available, using general model"
-            )
+            logger.warning("No specialized models available, using general model")
 
         # Update Langfuse trace with selection result
         if langfuse_client.enabled and trace_id:
@@ -269,9 +257,7 @@ class LMStudioVectorizer:
                     model or "auto_select",
                 ],
                 input_data={
-                    "content_preview": text[:100] + "..."
-                    if len(text) > 100
-                    else text,
+                    "content_preview": text[:100] + "..." if len(text) > 100 else text,
                     "content_length": len(text),
                     "content_type": content_type,
                     "detected_type": detected_type,
@@ -282,9 +268,7 @@ class LMStudioVectorizer:
         try:
             # Auto-select model if not specified
             if model is None:
-                model = self.select_model_for_content(
-                    content_type, detected_type
-                )
+                model = self.select_model_for_content(content_type, detected_type)
 
             logger.debug(
                 f"Generating embedding with model {model} for {len(text)} chars"
@@ -338,9 +322,7 @@ class LMStudioVectorizer:
                     len(text) / total_duration if total_duration > 0 else 0
                 )
                 expected_dimensions = 768  # Common embedding dimension
-                dimension_score = (
-                    1.0 if len(embedding) == expected_dimensions else 0.8
-                )
+                dimension_score = 1.0 if len(embedding) == expected_dimensions else 0.8
                 speed_score = min(
                     1.0, chars_per_second / 1000
                 )  # Normalize to reasonable speed
@@ -357,8 +339,7 @@ class LMStudioVectorizer:
                 langfuse_client.score_trace(
                     trace_id=trace_id,
                     name="embedding_efficiency",
-                    value=chars_per_second
-                    / 1000,  # Normalized efficiency metric
+                    value=chars_per_second / 1000,  # Normalized efficiency metric
                     comment=f"Processing efficiency for {model}: {chars_per_second:.1f} chars/second",
                 )
 
@@ -464,13 +445,9 @@ class LMStudioVectorizer:
         try:
             # Auto-select model if not specified
             if model is None:
-                model = self.select_model_for_content(
-                    content_type, detected_type
-                )
+                model = self.select_model_for_content(content_type, detected_type)
 
-            logger.debug(
-                f"Generating {len(texts)} embeddings with model {model}"
-            )
+            logger.debug(f"Generating {len(texts)} embeddings with model {model}")
 
             # Generate embeddings using batch API
             api_start_time = time.time()
@@ -485,9 +462,7 @@ class LMStudioVectorizer:
             )
 
             # Calculate batch efficiency metrics
-            chars_per_second = (
-                total_chars / total_duration if total_duration > 0 else 0
-            )
+            chars_per_second = total_chars / total_duration if total_duration > 0 else 0
             embeddings_per_second = (
                 len(embeddings) / total_duration if total_duration > 0 else 0
             )
@@ -539,8 +514,7 @@ class LMStudioVectorizer:
                 langfuse_client.score_trace(
                     trace_id=trace_id,
                     name="batch_embedding_efficiency",
-                    value=embeddings_per_second
-                    / 10,  # Normalized efficiency metric
+                    value=embeddings_per_second / 10,  # Normalized efficiency metric
                     comment=f"Batch efficiency for {model}: {embeddings_per_second:.1f} embeddings/second",
                 )
 
@@ -555,9 +529,7 @@ class LMStudioVectorizer:
             return embeddings
 
         except Exception as e:
-            error_msg = (
-                f"Failed to generate batch embeddings with LM Studio: {e}"
-            )
+            error_msg = f"Failed to generate batch embeddings with LM Studio: {e}"
             logger.error(error_msg)
 
             # Record error in Langfuse
@@ -622,9 +594,7 @@ class LMStudioVectorizer:
             logger.error(f"Failed to calculate similarity: {e}")
             return 0.0
 
-    def get_embedding_info(
-        self, model: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def get_embedding_info(self, model: Optional[str] = None) -> Dict[str, Any]:
         """
         Get information about the embedding model.
 
@@ -682,9 +652,7 @@ async def generate_content_embedding(
 
         # Check if LM Studio is available
         if not await vectorizer.health_check():
-            logger.warning(
-                "LM Studio not available, skipping embedding generation"
-            )
+            logger.warning("LM Studio not available, skipping embedding generation")
             return None
 
         return vectorizer.generate_embedding(

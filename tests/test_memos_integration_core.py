@@ -7,23 +7,16 @@ This fulfills the P1-CC-02 task requirement.
 """
 
 import asyncio
-import json
 import time
-from typing import Dict, List, Optional
+from typing import Dict
 import pytest
-import pytest_asyncio
 import httpx
-from pathlib import Path
 
 # Service Configuration (allow override via env for docker-compose network)
 import os
 
-INGEST_SERVICE_URL = os.environ.get(
-    "INGEST_API_BASE_URL", "http://localhost:8000"
-)
-MEMOS_SERVICE_URL = os.environ.get(
-    "INGEST_MEMOS_BASE_URL", "http://localhost:8091"
-)
+INGEST_SERVICE_URL = os.environ.get("INGEST_API_BASE_URL", "http://localhost:8000")
+MEMOS_SERVICE_URL = os.environ.get("INGEST_MEMOS_BASE_URL", "http://localhost:8091")
 REQUEST_TIMEOUT = 60
 RETRY_ATTEMPTS = 3
 RETRY_DELAY = 2
@@ -51,7 +44,6 @@ class ServiceValidator:
                     response = await client.get(f"{url}/health")
 
                     if response.status_code == 200:
-                        health_data = response.json()
                         print(f"✅ {service_name} is ready")
                         return True
                     else:
@@ -135,16 +127,14 @@ class TestCoreIntegration:
     """Core integration tests between InGest-LLM.as and memOS.as."""
 
     @pytest.mark.asyncio
-    async def test_text_ingestion_to_memos(
-        self, service_health_check, test_context
-    ):
+    async def test_text_ingestion_to_memos(self, service_health_check, test_context):
         """Test complete text ingestion workflow."""
         print("\n📝 Testing text ingestion to memOS.as...")
 
         test_content = """
         This is a test document for validating the integration between
         InGest-LLM.as and memOS.as services in the ApexSigma ecosystem.
-        
+
         The content should be processed by InGest-LLM.as and stored
         in the appropriate memory tier within memOS.as.
         """
@@ -167,14 +157,12 @@ class TestCoreIntegration:
                 f"{INGEST_SERVICE_URL}/ingest/text", json=ingestion_request
             )
 
-            assert response.status_code == 200, (
-                f"Ingestion failed: {response.text}"
-            )
+            assert response.status_code == 200, f"Ingestion failed: {response.text}"
             ingestion_response = response.json()
 
             ServiceValidator.validate_ingestion_response(ingestion_response)
 
-            print(f"  ✅ Content ingested successfully")
+            print("  ✅ Content ingested successfully")
             print(f"     - Total chunks: {ingestion_response['total_chunks']}")
 
             # Step 2: Verify in memOS.as
@@ -189,9 +177,9 @@ class TestCoreIntegration:
                     f"{MEMOS_SERVICE_URL}/memory/{memory_id}"
                 )
 
-                assert memory_response.status_code == 200, (
-                    f"Memory {memory_id} not found in memOS.as"
-                )
+                assert (
+                    memory_response.status_code == 200
+                ), f"Memory {memory_id} not found in memOS.as"
 
                 print(f"     ✅ Memory {memory_id} verified in memOS.as")
 
@@ -212,7 +200,7 @@ def integration_test_function():
 class TestClass:
     def __init__(self):
         self.value = 42
-    
+
     def get_value(self):
         return self.value
 """
@@ -235,33 +223,30 @@ class TestClass:
                 f"{INGEST_SERVICE_URL}/ingest/text", json=ingestion_request
             )
 
-            assert response.status_code == 200, (
-                f"Code ingestion failed: {response.text}"
-            )
+            assert (
+                response.status_code == 200
+            ), f"Code ingestion failed: {response.text}"
             ingestion_response = response.json()
 
             # Validate procedural memory tier usage
             memory_tiers = [
-                result["memory_tier"]
-                for result in ingestion_response["results"]
+                result["memory_tier"] for result in ingestion_response["results"]
             ]
-            assert all(tier == "procedural" for tier in memory_tiers), (
-                f"Code should use procedural memory, got: {memory_tiers}"
-            )
+            assert all(
+                tier == "procedural" for tier in memory_tiers
+            ), f"Code should use procedural memory, got: {memory_tiers}"
 
-            print(f"  ✅ Code stored in procedural memory tier")
+            print("  ✅ Code stored in procedural memory tier")
             return ingestion_response
 
     @pytest.mark.asyncio
-    async def test_memory_search_integration(
-        self, service_health_check, test_context
-    ):
+    async def test_memory_search_integration(self, service_health_check, test_context):
         """Test that ingested content can be found via memOS.as search."""
         print("\n🔍 Testing memory search integration...")
 
         unique_content = f"""
         Integration test document with unique identifier: {test_context["test_id"]}
-        
+
         This content contains specific search terms that should be
         discoverable through the memOS.as search functionality.
         """
@@ -302,14 +287,10 @@ class TestClass:
                 print(f"  ✅ Search found {len(results)} relevant memories")
                 return search_results
             else:
-                print(
-                    f"  ⚠️ Search endpoint returned {search_response.status_code}"
-                )
+                print(f"  ⚠️ Search endpoint returned {search_response.status_code}")
 
     @pytest.mark.asyncio
-    async def test_concurrent_ingestion(
-        self, service_health_check, test_context
-    ):
+    async def test_concurrent_ingestion(self, service_health_check, test_context):
         """Test concurrent ingestion requests."""
         print("\n🔄 Testing concurrent ingestion...")
 
@@ -344,18 +325,16 @@ class TestClass:
         successful_sessions = 0
         for result in results:
             if isinstance(result, Exception):
-                raise IntegrationTestError(
-                    f"Concurrent session failed: {result}"
-                )
+                raise IntegrationTestError(f"Concurrent session failed: {result}")
 
             status_code, response_data = result
             if status_code == 200 and response_data:
                 ServiceValidator.validate_ingestion_response(response_data)
                 successful_sessions += 1
 
-        assert successful_sessions == 3, (
-            f"Expected 3 successful sessions, got {successful_sessions}"
-        )
+        assert (
+            successful_sessions == 3
+        ), f"Expected 3 successful sessions, got {successful_sessions}"
         print(f"  ✅ All {successful_sessions} concurrent sessions completed")
 
 
@@ -363,9 +342,7 @@ class TestErrorHandling:
     """Test error handling scenarios."""
 
     @pytest.mark.asyncio
-    async def test_invalid_content_handling(
-        self, service_health_check, test_context
-    ):
+    async def test_invalid_content_handling(self, service_health_check, test_context):
         """Test handling of invalid content."""
         print("\n⚠️ Testing invalid content handling...")
 
@@ -381,9 +358,9 @@ class TestErrorHandling:
             )
 
             # Should reject empty content
-            assert response.status_code == 422, (
-                f"Empty content should be rejected, got: {response.status_code}"
-            )
+            assert (
+                response.status_code == 422
+            ), f"Empty content should be rejected, got: {response.status_code}"
             print("  ✅ Empty content correctly rejected")
 
 

@@ -10,7 +10,6 @@ import logging
 import time
 from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime
-from uuid import UUID, uuid4
 
 from ..config import settings
 from ..services.vectorizer import generate_content_embedding
@@ -111,9 +110,7 @@ class ContentProcessor:
 
         return [chunk for chunk in chunks if len(chunk) >= self.min_chunk_size]
 
-    def _find_optimal_split(
-        self, content: str, target_size: int
-    ) -> Tuple[str, str]:
+    def _find_optimal_split(self, content: str, target_size: int) -> Tuple[str, str]:
         """
         Find optimal split point for content chunking.
 
@@ -258,9 +255,7 @@ class ContentProcessor:
             List[Optional[List[float]]]: Embeddings for each chunk (None if generation fails)
         """
         if not self.enable_embeddings or not settings.lm_studio_enabled:
-            logger.debug(
-                "Embedding generation disabled, returning None embeddings"
-            )
+            logger.debug("Embedding generation disabled, returning None embeddings")
             return [None] * len(chunks)
 
         embeddings = []
@@ -275,24 +270,18 @@ class ContentProcessor:
                 embeddings.append(embedding)
 
                 if embedding:
-                    logger.debug(
-                        f"Generated embedding for chunk {i + 1}/{len(chunks)}"
-                    )
+                    logger.debug(f"Generated embedding for chunk {i + 1}/{len(chunks)}")
                 else:
                     logger.warning(
                         f"Failed to generate embedding for chunk {i + 1}/{len(chunks)}"
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Error generating embedding for chunk {i + 1}: {e}"
-                )
+                logger.error(f"Error generating embedding for chunk {i + 1}: {e}")
                 embeddings.append(None)
 
         success_count = sum(1 for emb in embeddings if emb is not None)
-        logger.info(
-            f"Generated {success_count}/{len(chunks)} embeddings successfully"
-        )
+        logger.info(f"Generated {success_count}/{len(chunks)} embeddings successfully")
 
         return embeddings
 
@@ -321,8 +310,7 @@ class ContentProcessor:
         embeddings = await self.generate_embeddings_for_chunks(
             chunks=chunks,
             content_type=content_type,
-            detected_type=detected_type
-            or content_metadata.get("detected_type"),
+            detected_type=detected_type or content_metadata.get("detected_type"),
         )
 
         return {
@@ -334,9 +322,7 @@ class ContentProcessor:
                 "original_size": len(content),
                 "cleaned_size": len(cleaned_content),
                 "chunk_count": len(chunks),
-                "embeddings_generated": sum(
-                    1 for emb in embeddings if emb is not None
-                ),
+                "embeddings_generated": sum(1 for emb in embeddings if emb is not None),
                 "embedding_enabled": self.enable_embeddings,
             },
         }
@@ -489,11 +475,7 @@ class ContentProcessor:
                 ]
             )
             class_count = len(
-                [
-                    e
-                    for e in parsing_result.elements
-                    if e.element_type.value == "class"
-                ]
+                [e for e in parsing_result.elements if e.element_type.value == "class"]
             )
             total_duration = time.time() - start_time
 
@@ -514,25 +496,19 @@ class ContentProcessor:
                         ),
                         "processing_times": {
                             "ast_duration_ms": int(ast_duration * 1000),
-                            "chunking_duration_ms": int(
-                                chunking_duration * 1000
-                            ),
-                            "embedding_duration_ms": int(
-                                embedding_duration * 1000
-                            ),
+                            "chunking_duration_ms": int(chunking_duration * 1000),
+                            "embedding_duration_ms": int(embedding_duration * 1000),
                             "total_duration_ms": int(total_duration * 1000),
                         },
                         "efficiency_metrics": {
-                            "elements_per_second": total_elements
-                            / total_duration
+                            "elements_per_second": total_elements / total_duration
                             if total_duration > 0
                             else 0,
                             "lines_per_second": parsing_result.total_lines
                             / total_duration
                             if total_duration > 0
                             else 0,
-                            "chars_per_second": len(source_code)
-                            / total_duration
+                            "chars_per_second": len(source_code) / total_duration
                             if total_duration > 0
                             else 0,
                         },
@@ -549,9 +525,7 @@ class ContentProcessor:
 
                 # Score processing efficiency
                 elements_per_second = (
-                    total_elements / total_duration
-                    if total_duration > 0
-                    else 0
+                    total_elements / total_duration if total_duration > 0 else 0
                 )
                 efficiency_score = min(
                     1.0, elements_per_second / 10
@@ -646,13 +620,9 @@ class ContentProcessor:
                 )
 
             # Fallback to regular text processing
-            return await self.process_content_with_embeddings(
-                source_code, content_type
-            )
+            return await self.process_content_with_embeddings(source_code, content_type)
 
-    def detect_content_type(
-        self, content: str, file_path: Optional[str] = None
-    ) -> str:
+    def detect_content_type(self, content: str, file_path: Optional[str] = None) -> str:
         """
         Detect content type from content and file path.
 
@@ -733,9 +703,7 @@ class ContentProcessor:
                 "return ",
                 "yield ",
             ]
-            python_matches = [
-                ind for ind in python_indicators if ind in content_lower
-            ]
+            python_matches = [ind for ind in python_indicators if ind in content_lower]
             if python_matches:
                 detected_type = "python"
                 detection_method = "content_analysis"
@@ -752,24 +720,19 @@ class ContentProcessor:
                     detection_method = "content_validation"
                     confidence_score = 0.95
                     indicators_found.append("valid_json_structure")
-                except:
+                except json.JSONDecodeError:
                     indicators_found.append("json_like_start_but_invalid")
 
             # Check for Markdown
             elif any(
-                pattern in content
-                for pattern in ["# ", "## ", "### ", "```", "*", "-"]
+                pattern in content for pattern in ["# ", "## ", "### ", "```", "*", "-"]
             ):
                 markdown_patterns = ["# ", "## ", "### ", "```", "*", "-"]
-                markdown_matches = [
-                    p for p in markdown_patterns if p in content
-                ]
+                markdown_matches = [p for p in markdown_patterns if p in content]
                 if markdown_matches:
                     detected_type = "markdown"
                     detection_method = "content_analysis"
-                    confidence_score = min(
-                        0.8, 0.4 + len(markdown_matches) * 0.1
-                    )
+                    confidence_score = min(0.8, 0.4 + len(markdown_matches) * 0.1)
                     indicators_found.extend(markdown_matches)
 
         detection_duration = time.time() - start_time

@@ -5,6 +5,9 @@ from .api.ingestion import router as ingestion_router
 from .api.repository import router as repository_router
 from .api.ecosystem import router as ecosystem_router
 from .api.analysis import router as analysis_router
+
+# from .api.omega_ingest import router as omega_ingest_router  # Temporarily disabled due to import issues
+# from .routers.eod_logs import router as eod_logs_router  # Temporarily disabled due to missing core modules
 from .observability.setup import setup_observability, get_observability_status
 from .observability.logging import get_logger
 
@@ -26,6 +29,8 @@ app.include_router(ingestion_router)
 app.include_router(repository_router)
 app.include_router(ecosystem_router)
 app.include_router(analysis_router)
+# app.include_router(omega_ingest_router)  # Temporarily disabled due to import issues
+# app.include_router(eod_logs_router)  # Temporarily disabled due to missing core modules
 
 
 @app.get("/", response_model=dict)
@@ -48,16 +53,16 @@ def health_check():
     """
     # Get observability status
     obs_status = get_observability_status()
-    
+
     # Create dependencies info
     dependencies = {
         "memOS.as": f"configured: {settings.memos_base_url}",
-        **obs_status.get("integrations", {})
+        **obs_status.get("integrations", {}),
     }
-    
+
     return HealthResponse(
         service=settings.app_name,
         version=settings.app_version,
         dependencies=dependencies,
-        **obs_status.get("observability", {})
+        **obs_status.get("observability", {}),
     )
