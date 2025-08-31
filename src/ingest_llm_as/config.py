@@ -74,8 +74,6 @@ class Settings(BaseSettings):
     langfuse_public_key: Optional[str] = None
     langfuse_secret_key: Optional[str] = None
     langfuse_host: str = "https://cloud.langfuse.com"
-    langfuse_api_key_public: Optional[str] = None  # Alternative naming
-    langfuse_api_key_secret: Optional[str] = None  # Alternative naming
 
     model_config = SettingsConfigDict(
         env_file=".env",
