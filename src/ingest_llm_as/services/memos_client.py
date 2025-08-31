@@ -8,12 +8,11 @@ memory storage system.
 import hashlib
 import logging
 from typing import Dict, List, Optional
-from uuid import UUID, uuid4
 
 import httpx
 from pydantic import ValidationError
 
-from ..config import settings
+from ..config import get_settings
 from ..models import (
     MemoryStorageRequest,
     MemoryStorageResponse,
@@ -50,14 +49,20 @@ class MemOSClient:
     """
 
     def __init__(self):
-        self.base_url = settings.memos_base_url.rstrip("/")
-        self.timeout = settings.memos_timeout
-        self.api_key = settings.memos_api_key
+        # Get fresh settings to prevent caching issues
+        current_settings = get_settings()
+
+        self.base_url = current_settings.memos_base_url.rstrip("/")
+        self.timeout = current_settings.memos_timeout
+        self.api_key = current_settings.memos_api_key
+
+        # Debug: Print configuration
+        print(f"DEBUG MemOSClient: base_url={self.base_url}, timeout={self.timeout}")
 
         # HTTP client configuration
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": f"{settings.app_name}/{settings.app_version}",
+            "User-Agent": f"{current_settings.app_name}/{current_settings.app_version}",
         }
 
         if self.api_key:
@@ -83,9 +88,12 @@ class MemOSClient:
             bool: True if memOS.as is healthy, False otherwise.
         """
         try:
+            print(f"DEBUG health_check: Making request to {self.base_url}/health")
             response = await self.client.get("/health")
+            print(f"DEBUG health_check: Response status {response.status_code}")
             return response.status_code == 200
         except Exception as e:
+            print(f"DEBUG health_check: Error {e}")
             logger.warning(f"memOS.as health check failed: {e}")
             return False
 
@@ -125,9 +133,7 @@ class MemOSClient:
                 MemoryTier.PROCEDURAL: "2",
             }
 
-            tier_number = tier_mapping.get(
-                memory_tier, "3"
-            )  # Default to semantic
+            tier_number = tier_mapping.get(memory_tier, "3")  # Default to semantic
 
             # Prepare storage request
             storage_request = MemoryStorageRequest(
@@ -242,5 +248,8 @@ async def get_memos_client() -> MemOSClient:
     """
     global _client_instance
     if _client_instance is None:
+        print("DEBUG get_memos_client: Creating new MemOSClient instance")
         _client_instance = MemOSClient()
+    else:
+        print("DEBUG get_memos_client: Using existing MemOSClient instance")
     return _client_instance

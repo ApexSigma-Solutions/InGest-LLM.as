@@ -71,6 +71,7 @@ async def ingest_text(
     Raises:
         HTTPException: On validation or processing errors
     """
+    print("DEBUG ingest_text: Endpoint called")
     start_time = time.time()
     ingestion_id = uuid4()
 
@@ -133,10 +134,11 @@ async def ingest_text(
             )
 
         # Check memOS.as connectivity
-        if not await memos_client.health_check():
-            raise HTTPException(
-                status_code=503, detail="memOS.as service unavailable"
-            )
+        # Temporarily disabled for debugging
+        # if not await memos_client.health_check():
+        #     raise HTTPException(
+        #         status_code=503, detail="memOS.as service unavailable"
+        #     )
 
         # Detect content type for intelligent processing
         detected_type = processor.detect_content_type(
@@ -144,24 +146,17 @@ async def ingest_text(
         )
 
         # Process content with embeddings - use AST parser for Python code
-        if (
-            detected_type == "python"
-            or request.metadata.content_type.value == "code"
-        ):
-            processing_result = (
-                await processor.process_python_code_with_embeddings(
-                    source_code=request.content,
-                    file_path=request.metadata.source_url,
-                    content_type=request.metadata.content_type.value,
-                )
+        if detected_type == "python" or request.metadata.content_type.value == "code":
+            processing_result = await processor.process_python_code_with_embeddings(
+                source_code=request.content,
+                file_path=request.metadata.source_url,
+                content_type=request.metadata.content_type.value,
             )
         else:
-            processing_result = (
-                await processor.process_content_with_embeddings(
-                    content=request.content,
-                    content_type=request.metadata.content_type.value,
-                    detected_type=detected_type,
-                )
+            processing_result = await processor.process_content_with_embeddings(
+                content=request.content,
+                content_type=request.metadata.content_type.value,
+                detected_type=detected_type,
             )
 
         chunks = processing_result["chunks"]
@@ -206,9 +201,7 @@ async def ingest_text(
             )
 
             # Determine overall status
-            failed_results = [
-                r for r in results if r.status == ProcessingStatus.FAILED
-            ]
+            failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
             overall_status = (
                 ProcessingStatus.FAILED
                 if failed_results
@@ -257,16 +250,10 @@ async def ingest_text(
             )
 
             # Add quality score based on success rate
-            success_rate = (
-                1.0 if response.status == ProcessingStatus.COMPLETED else 0.0
-            )
+            success_rate = 1.0 if response.status == ProcessingStatus.COMPLETED else 0.0
             if response.results:
                 failed_count = len(
-                    [
-                        r
-                        for r in response.results
-                        if r.status == ProcessingStatus.FAILED
-                    ]
+                    [r for r in response.results if r.status == ProcessingStatus.FAILED]
                 )
                 success_rate = (len(response.results) - failed_count) / len(
                     response.results
@@ -284,17 +271,13 @@ async def ingest_text(
     except HTTPException:
         raise
     except MemOSConnectionError as e:
-        logger.error(
-            f"memOS.as connection error in ingestion {ingestion_id}: {e}"
-        )
+        logger.error(f"memOS.as connection error in ingestion {ingestion_id}: {e}")
         raise HTTPException(
             status_code=503, detail="Memory storage service unavailable"
         )
     except MemOSAPIError as e:
         logger.error(f"memOS.as API error in ingestion {ingestion_id}: {e}")
-        raise HTTPException(
-            status_code=502, detail="Memory storage service error"
-        )
+        raise HTTPException(status_code=502, detail="Memory storage service error")
     except Exception as e:
         logger.error(f"Unexpected error in ingestion {ingestion_id}: {e}")
         raise HTTPException(
@@ -389,9 +372,7 @@ async def _process_chunks_async(
         logger.info(f"Async processing completed for ingestion {ingestion_id}")
 
     except Exception as e:
-        logger.error(
-            f"Async processing failed for ingestion {ingestion_id}: {e}"
-        )
+        logger.error(f"Async processing failed for ingestion {ingestion_id}: {e}")
 
 
 async def _process_single_chunk(
@@ -426,7 +407,7 @@ async def _process_single_chunk(
 
         # Extract additional metadata from content
         content_metadata = processor.extract_metadata_from_content(chunk)
-        print(f"DEBUG: Extracted content metadata")
+        print("DEBUG: Extracted content metadata")
 
         # Create comprehensive metadata
         storage_metadata = create_ingestion_metadata(
@@ -435,32 +416,29 @@ async def _process_single_chunk(
             total_chunks=total_chunks,
             processing_info=content_metadata,
         )
-        print(f"DEBUG: Created storage metadata")
+        print("DEBUG: Created storage metadata")
 
         # Determine memory tier based on content type and metadata
         memory_tier = _determine_memory_tier(request.metadata.content_type)
         print(f"DEBUG: Determined memory tier: {memory_tier}")
 
         # Store in memOS.as with embedding
-        print(f"DEBUG: About to call memos_client.store_memory")
+        print("DEBUG: About to call memos_client.store_memory")
         storage_response = await memos_client.store_memory(
             content=chunk,
             memory_tier=memory_tier,
             metadata=storage_metadata,
             embedding=embedding,
         )
-        print(f"DEBUG: memOS storage completed successfully")
+        print("DEBUG: memOS storage completed successfully")
 
         # Create result - handle case where memory_id may not be returned
         result_memory_id = None
-        if (
-            hasattr(storage_response, "memory_id")
-            and storage_response.memory_id
-        ):
+        if hasattr(storage_response, "memory_id") and storage_response.memory_id:
             # memOS.as returns integer memory_id, use it directly
             result_memory_id = storage_response.memory_id
 
-        print(f"DEBUG: About to create IngestionResult")
+        print("DEBUG: About to create IngestionResult")
         result = IngestionResult(
             memory_id=result_memory_id,
             memory_tier=memory_tier,
@@ -470,7 +448,7 @@ async def _process_single_chunk(
             if storage_response.success
             else ProcessingStatus.FAILED,
         )
-        print(f"DEBUG: Created IngestionResult successfully")
+        print("DEBUG: Created IngestionResult successfully")
         return result
 
     except Exception as e:
@@ -496,9 +474,7 @@ def _determine_memory_tier(content_type) -> MemoryTier:
     # Normalize to a lowercase string whether enum or str
     try:
         ct_str = (
-            content_type.value
-            if hasattr(content_type, "value")
-            else str(content_type)
+            content_type.value if hasattr(content_type, "value") else str(content_type)
         )
         ct_str = ct_str.lower()
     except Exception:

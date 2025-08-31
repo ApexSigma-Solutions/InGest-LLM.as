@@ -12,44 +12,50 @@ from contextlib import contextmanager
 from langfuse import Langfuse
 from langfuse.decorators import observe
 
-from ..config import settings
-
 
 class LangfuseClient:
     """Langfuse client for LLM observability."""
-    
+
     def __init__(self):
         """Initialize Langfuse client with environment configuration."""
-        self._client: Optional[Langfuse] = None
-        self._enabled = self._check_langfuse_config()
-    
+        self._client = None
+        self._enabled = False
+        self._init_client()
+
+    def _init_client(self):
+        """Initialize the Langfuse client."""
+        try:
+            public_key = os.environ.get("LANGFUSE_API_KEY_PUBLIC")
+            secret_key = os.environ.get("LANGFUSE_API_KEY_SECRET")
+
+            if public_key and secret_key:
+                self._client = Langfuse(
+                    public_key=public_key,
+                    secret_key=secret_key,
+                    host="https://cloud.langfuse.com",
+                )
+                self._enabled = True
+                print("Langfuse client initialized successfully")
+            else:
+                print("Langfuse API keys not found - LLM tracing disabled")
+        except Exception as e:
+            print(f"Failed to initialize Langfuse client: {str(e)}")
+            self._client = None
+            self._enabled = False
+
     def _check_langfuse_config(self) -> bool:
         """Check if Langfuse is properly configured."""
-        required_vars = ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]
-        return all(os.getenv(var) for var in required_vars)
-    
+        return self._enabled
+
     @property
-    def client(self) -> Optional[Langfuse]:
+    def client(self):
         """Get Langfuse client instance."""
-        if not self._enabled:
-            return None
-            
-        if self._client is None:
-            self._client = Langfuse(
-                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-                host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
-                environment=os.getenv("ENVIRONMENT", "development"),
-                release=settings.app_version,
-            )
-        
         return self._client
-    
+
     @property
     def enabled(self) -> bool:
-        """Check if Langfuse is enabled and configured."""
         return self._enabled
-    
+
     def create_trace(
         self,
         name: str,
@@ -63,19 +69,45 @@ class LangfuseClient:
         """Create a new trace in Langfuse."""
         if not self.client:
             return None
-        
-        trace = self.client.trace(
-            name=name,
-            session_id=session_id,
-            user_id=user_id,
-            metadata=metadata or {},
-            tags=tags or [],
-            input=input_data,
-            output=output_data,
-        )
-        
-        return trace.id if trace else None
-    
+
+        try:
+            trace = self.client.trace(
+                name=name,
+                session_id=session_id,
+                user_id=user_id,
+                metadata=metadata or {},
+                tags=tags or [],
+                input=input_data,
+                output=output_data,
+            )
+
+            return trace.id if trace else None
+        except Exception as e:
+            print(f"Failed to create trace: {str(e)}")
+            return None
+
+    def create_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Create a new session in Langfuse for grouping traces."""
+        if not self.client:
+            return None
+
+        try:
+            session = self.client.trace(
+                id=session_id,
+                user_id=user_id,
+                metadata=metadata or {},
+            )
+
+            return session.id if session else None
+        except Exception as e:
+            print(f"Failed to create session: {str(e)}")
+            return None
+
     def create_span(
         self,
         trace_id: str,
@@ -90,7 +122,7 @@ class LangfuseClient:
         """Create a span within an existing trace."""
         if not self.client:
             return None
-        
+
         span = self.client.span(
             trace_id=trace_id,
             name=name,
@@ -101,9 +133,9 @@ class LangfuseClient:
             start_time=start_time,
             end_time=end_time,
         )
-        
+
         return span.id if span else None
-    
+
     def score_trace(
         self,
         trace_id: str,
@@ -115,7 +147,7 @@ class LangfuseClient:
         """Add a score to a trace for quality evaluation."""
         if not self.client:
             return
-        
+
         self.client.score(
             trace_id=trace_id,
             name=name,
@@ -123,12 +155,12 @@ class LangfuseClient:
             comment=comment,
             metadata=metadata or {},
         )
-    
+
     def flush(self):
         """Flush any pending events to Langfuse."""
         if self.client:
             self.client.flush()
-    
+
     @contextmanager
     def trace_context(
         self,
@@ -147,9 +179,9 @@ class LangfuseClient:
                     tags=tags,
                     input_data=input_data,
                 )
-            
+
             yield trace_id
-            
+
         finally:
             if self.enabled and trace_id:
                 self.flush()
@@ -169,44 +201,57 @@ def trace_ingestion(
     content_size: int,
     chunk_count: int = 0,
     metadata: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ):
-    """Decorator for tracing ingestion operations."""
+    """Decorator for tracing ingestion operations with session support."""
+
     def decorator(func):
         if not langfuse_client.enabled:
             return func
-        
-        @observe(name=f"ingestion_{content_type}")
+
+        @observe(
+            name=f"ingestion_{content_type}",
+            session_id=session_id,
+            user_id=user_id,
+            metadata=metadata,
+        )
         def wrapper(*args, **kwargs):
             # Execute the function with Langfuse observation
             return func(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator
 
 
 def trace_content_processing(operation_type: str):
     """Decorator for tracing content processing operations."""
+
     def decorator(func):
         if not langfuse_client.enabled:
             return func
-        
+
         @observe(name=f"content_processing_{operation_type}")
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator
 
 
 def trace_memos_interaction(endpoint: str, method: str):
     """Decorator for tracing memOS.as service interactions."""
+
     def decorator(func):
         if not langfuse_client.enabled:
             return func
-        
+
         @observe(name=f"memos_interaction_{endpoint.replace('/', '_')}")
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator

@@ -3,7 +3,7 @@
 import os
 import pytest
 from langfuse import Langfuse
-from langfuse.decorators import observe
+from langfuse import observe
 
 
 @pytest.mark.integration

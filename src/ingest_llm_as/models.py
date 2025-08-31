@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 from pathlib import Path
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ContentType(str, Enum):
@@ -45,17 +45,13 @@ class IngestionMetadata(BaseModel):
         None, description="Original URL or path if applicable"
     )
     author: Optional[str] = Field(None, description="Content author if known")
-    title: Optional[str] = Field(
-        None, description="Content title or identifier"
-    )
-    tags: List[str] = Field(
-        default_factory=list, description="Tags for categorization"
-    )
+    title: Optional[str] = Field(None, description="Content title or identifier")
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
     custom_fields: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
 
-    @validator("tags")
+    @field_validator("tags")
     def validate_tags(cls, v):
         """Ensure tags are non-empty strings."""
         return [tag.strip() for tag in v if tag and tag.strip()]
@@ -74,11 +70,9 @@ class IngestionRequest(BaseModel):
     chunk_size: Optional[int] = Field(
         None, ge=100, le=10000, description="Optional chunking size"
     )
-    process_async: bool = Field(
-        False, description="Whether to process asynchronously"
-    )
+    process_async: bool = Field(False, description="Whether to process asynchronously")
 
-    @validator("content")
+    @field_validator("content")
     def validate_content(cls, v):
         """Ensure content is not empty after stripping."""
         stripped = v.strip()
@@ -196,8 +190,7 @@ class HealthResponse(BaseModel):
     tracing_enabled: Optional[bool] = None
     logging_structured: Optional[bool] = None
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
 
 
 # Repository Ingestion Models
@@ -257,10 +250,10 @@ class RepositoryIngestionRequest(BaseModel):
     )
     metadata: IngestionMetadata
 
-    @validator("source_path")
+    @field_validator("source_path")
     def validate_source_path(cls, v, values):
         """Validate the source path based on repository source."""
-        repository_source = values.get("repository_source")
+        repository_source = values.data.get("repository_source")
 
         if repository_source == RepositorySource.LOCAL_PATH:
             # Validate local path exists
@@ -280,7 +273,7 @@ class RepositoryIngestionRequest(BaseModel):
 
         return v
 
-    @validator("include_patterns")
+    @field_validator("include_patterns")
     def validate_include_patterns(cls, v):
         """Ensure at least one include pattern."""
         if not v:
