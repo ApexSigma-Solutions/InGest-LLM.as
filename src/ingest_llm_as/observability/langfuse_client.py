@@ -6,11 +6,9 @@ quality evaluation for agent interactions in the ApexSigma ecosystem.
 """
 
 import os
-from typing import Optional, Dict, Any
-from contextlib import contextmanager
+from typing import Optional, Dict, Any, List
 
 from langfuse import Langfuse
-from langfuse.decorators import observe
 
 
 class LangfuseClient:
@@ -18,240 +16,110 @@ class LangfuseClient:
 
     def __init__(self):
         """Initialize Langfuse client with environment configuration."""
-        self._client = None
-        self._enabled = False
-        self._init_client()
+        self.client = None
+        self._initialize_client()
 
-    def _init_client(self):
+    def _initialize_client(self):
         """Initialize the Langfuse client."""
         try:
-            public_key = os.environ.get("LANGFUSE_API_KEY_PUBLIC")
-            secret_key = os.environ.get("LANGFUSE_API_KEY_SECRET")
+            public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+            secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+            host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
             if public_key and secret_key:
-                self._client = Langfuse(
-                    public_key=public_key,
-                    secret_key=secret_key,
-                    host="https://cloud.langfuse.com",
+                self.client = Langfuse(
+                    public_key=public_key, secret_key=secret_key, host=host
                 )
-                self._enabled = True
                 print("Langfuse client initialized successfully")
             else:
-                print("Langfuse API keys not found - LLM tracing disabled")
+                print("Langfuse API keys not found in environment")
         except Exception as e:
-            print(f"Failed to initialize Langfuse client: {str(e)}")
-            self._client = None
-            self._enabled = False
+            print(f"Failed to initialize Langfuse client: {e}")
+            self.client = None
 
-    def _check_langfuse_config(self) -> bool:
-        """Check if Langfuse is properly configured."""
-        return self._enabled
-
-    @property
-    def client(self):
-        """Get Langfuse client instance."""
-        return self._client
+    def is_available(self) -> bool:
+        """Check if Langfuse client is available."""
+        return self.client is not None
 
     @property
     def enabled(self) -> bool:
-        return self._enabled
+        """Check if Langfuse client is enabled (alias for is_available)."""
+        return self.is_available()
 
     def create_trace(
         self,
         name: str,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[list] = None,
-        input_data: Optional[Any] = None,
-        output_data: Optional[Any] = None,
+        tags: Optional[List[str]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
-        """Create a new trace in Langfuse."""
+        """Create a new trace."""
         if not self.client:
             return None
 
         try:
-            trace = self.client.trace(
-                name=name,
-                session_id=session_id,
-                user_id=user_id,
-                metadata=metadata or {},
-                tags=tags or [],
-                input=input_data,
-                output=output_data,
-            )
+            # Merge input_data into metadata if provided
+            if input_data:
+                metadata = metadata or {}
+                metadata.update(input_data)
 
-            return trace.id if trace else None
+            trace = self.client.start_as_current_span(name=name, metadata=metadata)
+            return getattr(trace, "id", None)
         except Exception as e:
-            print(f"Failed to create trace: {str(e)}")
+            print(f"Failed to create trace: {e}")
             return None
 
-    def create_session(
+    def create_generation(
         self,
-        session_id: str,
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
-        """Create a new session in Langfuse for grouping traces."""
-        if not self.client:
-            return None
-
-        try:
-            session = self.client.trace(
-                id=session_id,
-                user_id=user_id,
-                metadata=metadata or {},
-            )
-
-            return session.id if session else None
-        except Exception as e:
-            print(f"Failed to create session: {str(e)}")
-            return None
-
-    def create_span(
-        self,
-        trace_id: str,
         name: str,
-        span_type: str = "span",
-        metadata: Optional[Dict[str, Any]] = None,
-        input_data: Optional[Any] = None,
-        output_data: Optional[Any] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-    ) -> Optional[str]:
-        """Create a span within an existing trace."""
-        if not self.client:
-            return None
-
-        span = self.client.span(
-            trace_id=trace_id,
-            name=name,
-            type=span_type,
-            metadata=metadata or {},
-            input=input_data,
-            output=output_data,
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-        return span.id if span else None
-
-    def score_trace(
-        self,
-        trace_id: str,
-        name: str,
-        value: float,
-        comment: Optional[str] = None,
+        model: str,
+        input_text: str,
+        output_text: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ):
-        """Add a score to a trace for quality evaluation."""
+        """Create a generation record."""
         if not self.client:
             return
 
-        self.client.score(
-            trace_id=trace_id,
-            name=name,
-            value=value,
-            comment=comment,
-            metadata=metadata or {},
-        )
+        try:
+            generation = self.client.start_as_current_generation(
+                name=name,
+                model=model,
+                input=input_text,
+                output=output_text,
+                metadata=metadata,
+            )
+            return getattr(generation, "id", None)
+        except Exception as e:
+            print(f"Failed to create generation: {e}")
+            return None
+
+    def create_score(self, name: str, value: float, comment: Optional[str] = None):
+        """Create a score for evaluation."""
+        if not self.client:
+            return
+
+        try:
+            self.client.score_current_trace(name=name, value=value, comment=comment)
+        except Exception as e:
+            print(f"Failed to create score: {e}")
 
     def flush(self):
-        """Flush any pending events to Langfuse."""
+        """Flush pending events."""
         if self.client:
-            self.client.flush()
-
-    @contextmanager
-    def trace_context(
-        self,
-        name: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[list] = None,
-        input_data: Optional[Any] = None,
-    ):
-        """Context manager for creating and managing a trace."""
-        trace_id = None
-        try:
-            if self.enabled:
-                trace_id = self.create_trace(
-                    name=name,
-                    metadata=metadata,
-                    tags=tags,
-                    input_data=input_data,
-                )
-
-            yield trace_id
-
-        finally:
-            if self.enabled and trace_id:
-                self.flush()
+            try:
+                self.client.flush()
+            except Exception as e:
+                print(f"Failed to flush Langfuse events: {e}")
 
 
-# Global Langfuse client instance
-langfuse_client = LangfuseClient()
+# Global client instance
+_langfuse_client = None
 
 
 def get_langfuse_client() -> LangfuseClient:
     """Get the global Langfuse client instance."""
-    return langfuse_client
-
-
-def trace_ingestion(
-    content_type: str,
-    content_size: int,
-    chunk_count: int = 0,
-    metadata: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-):
-    """Decorator for tracing ingestion operations with session support."""
-
-    def decorator(func):
-        if not langfuse_client.enabled:
-            return func
-
-        @observe(
-            name=f"ingestion_{content_type}",
-            session_id=session_id,
-            user_id=user_id,
-            metadata=metadata,
-        )
-        def wrapper(*args, **kwargs):
-            # Execute the function with Langfuse observation
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-def trace_content_processing(operation_type: str):
-    """Decorator for tracing content processing operations."""
-
-    def decorator(func):
-        if not langfuse_client.enabled:
-            return func
-
-        @observe(name=f"content_processing_{operation_type}")
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-def trace_memos_interaction(endpoint: str, method: str):
-    """Decorator for tracing memOS.as service interactions."""
-
-    def decorator(func):
-        if not langfuse_client.enabled:
-            return func
-
-        @observe(name=f"memos_interaction_{endpoint.replace('/', '_')}")
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
+    global _langfuse_client
+    if _langfuse_client is None:
+        _langfuse_client = LangfuseClient()
+    return _langfuse_client
