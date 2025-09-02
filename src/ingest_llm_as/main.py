@@ -6,7 +6,8 @@ from .api.repository import router as repository_router
 from .api.ecosystem import router as ecosystem_router
 from .api.analysis import router as analysis_router
 
-# from .api.omega_ingest import router as omega_ingest_router  # Temporarily disabled due to import issues
+from .api.omega_ingest import router as omega_ingest_router
+
 # from .routers.eod_logs import router as eod_logs_router  # Temporarily disabled due to missing core modules
 from .observability.setup import setup_observability, get_observability_status
 from .observability.logging import get_logger
@@ -29,7 +30,7 @@ app.include_router(ingestion_router)
 app.include_router(repository_router)
 app.include_router(ecosystem_router)
 app.include_router(analysis_router)
-# app.include_router(omega_ingest_router)  # Temporarily disabled due to import issues
+app.include_router(omega_ingest_router)
 # app.include_router(eod_logs_router)  # Temporarily disabled due to missing core modules
 
 

@@ -8,8 +8,8 @@ services:
       - .env
     environment:
       # Langfuse observability integration
-      - LANGFUSE_PUBLIC_KEY=pk-lf-f58be3ee-e274-4bf1-8ffe-4df7e9fcf61e
-      - LANGFUSE_SECRET_KEY=sk-lf-1d26cfb7-fcaf-4fdf-830e-a9ae4d32d7fa
+      - LANGFUSE_PUBLIC_KEY=pk-lf-bba97616-6c46-4d0d-b3a1-2b3cb9e03ee5
+      - LANGFUSE_SECRET_KEY=sk-lf-ad7e9785-fb81-4340-aa6a-4cc265aec073
       - LANGFUSE_HOST=https://cloud.langfuse.com
       # memOS.as integration - use container name for internal networking
       - INGEST_MEMOS_BASE_URL=http://192.168.68.102:8090
