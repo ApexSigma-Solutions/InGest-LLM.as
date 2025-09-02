@@ -31,6 +31,7 @@ COPY tests/ ./tests/
 
 # Install dependencies (include dev group for pytest and tooling)
 RUN poetry install --with dev
+RUN poetry add deprecated
 RUN pip install langfuse
 
 # Expose port
