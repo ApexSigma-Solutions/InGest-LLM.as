@@ -3,7 +3,10 @@ Configuration settings for InGest-LLM.as service.
 """
 
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from apexsigma_core.vault import get_secret
 
 
 class Settings(BaseSettings):
@@ -28,16 +31,16 @@ class Settings(BaseSettings):
     memos_timeout: int = 30
 
     # Database configuration - UPDATED FOR DOCKER NETWORKING
-    postgres_host: str = "postgres"
+    postgres_host: str = "apexsigma_postgres"
     postgres_port: str = "5432"
-    postgres_user: str = "memos"
-    postgres_password: str = "memos_password"
-    postgres_db: str = "memos"
-    redis_host: str = "redis"
+    postgres_user: str = "apexsigma_user"
+    postgres_password: Optional[str] = None
+    postgres_db: str = "apexsigma_db"  # Updated to canonical database name
+    redis_host: str = "apexsigma_redis"
     redis_port: str = "6379"
-    neo4j_host: str = "neo4j"
+    neo4j_host: str = "apexsigma_neo4j"
     neo4j_port: str = "7687"
-    qdrant_host: str = "qdrant"
+    qdrant_host: str = "apexsigma_qdrant"
     qdrant_port: str = "6333"
 
     # Observability endpoints - UPDATED FOR DOCKER NETWORKING
@@ -83,6 +86,46 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_ignore_empty=True,
     )
+
+    @field_validator("postgres_password", mode="before")
+    @classmethod
+    def get_postgres_password(cls, v):
+        """Fetch PostgreSQL password from Vault if not provided."""
+        if v is None or v == "your_secure_postgres_password_here":
+            return get_secret("services/ingest/database", "postgres_password")
+        return v
+
+    @field_validator("memos_api_key", mode="before")
+    @classmethod
+    def get_memos_api_key(cls, v):
+        """Fetch Memos API key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest/api", "memos_api_key")
+        return v
+
+    @field_validator("lm_studio_api_key", mode="before")
+    @classmethod
+    def get_lm_studio_api_key(cls, v):
+        """Fetch LM Studio API key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest/llm", "lm_studio_api_key")
+        return v
+
+    @field_validator("langfuse_public_key", mode="before")
+    @classmethod
+    def get_langfuse_public_key(cls, v):
+        """Fetch Langfuse public key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest/observability", "langfuse_public_key")
+        return v
+
+    @field_validator("langfuse_secret_key", mode="before")
+    @classmethod
+    def get_langfuse_secret_key(cls, v):
+        """Fetch Langfuse secret key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest/observability", "langfuse_secret_key")
+        return v
 
 
 # CRITICAL: Dynamic settings loading function to prevent caching issues
