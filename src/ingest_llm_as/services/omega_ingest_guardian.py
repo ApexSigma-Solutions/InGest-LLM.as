@@ -102,12 +102,16 @@ class OmegaIngestGuardian:
                             description=project.find("Description").text,
                             status=project.find("Status").text,
                             metadata={
-                                "vision": project.find("Vision").text
-                                if project.find("Vision") is not None
-                                else None,
-                                "architecture": project.find("Architecture").attrib
-                                if project.find("Architecture") is not None
-                                else {},
+                                "vision": (
+                                    project.find("Vision").text
+                                    if project.find("Vision") is not None
+                                    else None
+                                ),
+                                "architecture": (
+                                    project.find("Architecture").attrib
+                                    if project.find("Architecture") is not None
+                                    else {}
+                                ),
                             },
                             timestamp=datetime.now(timezone.utc).isoformat(),
                             relationships=[],

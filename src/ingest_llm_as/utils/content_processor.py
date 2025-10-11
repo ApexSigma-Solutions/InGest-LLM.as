@@ -365,9 +365,11 @@ class ContentProcessor:
                     "content_type": content_type,
                     "source_length": len(source_code),
                     "source_lines": len(source_code.split("\n")),
-                    "source_preview": source_code[:200] + "..."
-                    if len(source_code) > 200
-                    else source_code,
+                    "source_preview": (
+                        source_code[:200] + "..."
+                        if len(source_code) > 200
+                        else source_code
+                    ),
                 },
             )
 
@@ -501,16 +503,21 @@ class ContentProcessor:
                             "total_duration_ms": int(total_duration * 1000),
                         },
                         "efficiency_metrics": {
-                            "elements_per_second": total_elements / total_duration
-                            if total_duration > 0
-                            else 0,
-                            "lines_per_second": parsing_result.total_lines
-                            / total_duration
-                            if total_duration > 0
-                            else 0,
-                            "chars_per_second": len(source_code) / total_duration
-                            if total_duration > 0
-                            else 0,
+                            "elements_per_second": (
+                                total_elements / total_duration
+                                if total_duration > 0
+                                else 0
+                            ),
+                            "lines_per_second": (
+                                parsing_result.total_lines / total_duration
+                                if total_duration > 0
+                                else 0
+                            ),
+                            "chars_per_second": (
+                                len(source_code) / total_duration
+                                if total_duration > 0
+                                else 0
+                            ),
                         },
                     },
                 )
@@ -651,9 +658,9 @@ class ContentProcessor:
                 input_data={
                     "file_path": file_path,
                     "content_length": len(content),
-                    "content_preview": content[:100] + "..."
-                    if len(content) > 100
-                    else content,
+                    "content_preview": (
+                        content[:100] + "..." if len(content) > 100 else content
+                    ),
                 },
             )
 
@@ -765,9 +772,7 @@ class ContentProcessor:
             method_score = (
                 1.0
                 if detection_method == "file_extension"
-                else 0.8
-                if detection_method == "content_validation"
-                else 0.6
+                else 0.8 if detection_method == "content_validation" else 0.6
             )
             langfuse_client.score_trace(
                 trace_id=trace_id,

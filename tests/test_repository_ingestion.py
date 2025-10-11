@@ -10,9 +10,7 @@ import pytest
 import httpx
 
 # Test configuration
-INGEST_API_BASE_URL = os.environ.get(
-    "INGEST_API_BASE_URL", "http://localhost:8000"
-)
+INGEST_API_BASE_URL = os.environ.get("INGEST_API_BASE_URL", "http://localhost:8000")
 REQUEST_TIMEOUT = 120  # Increased timeout for cloning repositories
 
 
@@ -70,13 +68,9 @@ class TestRepositoryIngestion:
             # In that case, we should get a "failed" status with an appropriate message
             if ingestion_response["status"] == "failed":
                 assert "message" in ingestion_response
+                assert "Failed to clone repository" in ingestion_response["message"]
                 assert (
-                    "Failed to clone repository"
-                    in ingestion_response["message"]
-                )
-                assert (
-                    "No such file or directory: 'git'"
-                    in ingestion_response["message"]
+                    "No such file or directory: 'git'" in ingestion_response["message"]
                 )
                 # If Git is not available, this is expected behavior
                 return
@@ -89,8 +83,7 @@ class TestRepositoryIngestion:
             assert ingestion_response["total_chunks"] > 0
             assert "results" in ingestion_response
             assert (
-                len(ingestion_response["results"])
-                == ingestion_response["total_chunks"]
+                len(ingestion_response["results"]) == ingestion_response["total_chunks"]
             )
 
             # Validate each result
@@ -121,9 +114,7 @@ class TestRepositoryIngestion:
                 error_response = response.json()
                 assert error_response["status"] == "failed"
                 assert "message" in error_response
-                assert (
-                    "Failed to clone repository" in error_response["message"]
-                )
+                assert "Failed to clone repository" in error_response["message"]
             else:
                 # If Git is available but URL is invalid, we should get 4xx
                 assert 400 <= response.status_code < 500

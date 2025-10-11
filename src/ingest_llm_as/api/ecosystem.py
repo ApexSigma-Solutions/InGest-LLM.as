@@ -20,24 +20,21 @@ router = APIRouter(prefix="/ecosystem", tags=["ecosystem"])
 
 class EcosystemIngestionRequest(BaseModel):
     """Request model for ecosystem ingestion."""
-    
+
     include_historical: bool = Field(
-        default=True,
-        description="Whether to store historical snapshots in memOS"
+        default=True, description="Whether to store historical snapshots in memOS"
     )
     generate_cross_analysis: bool = Field(
-        default=True,
-        description="Whether to perform cross-project analysis"
+        default=True, description="Whether to perform cross-project analysis"
     )
     force_refresh: bool = Field(
-        default=False,
-        description="Force refresh even if recent snapshot exists"
+        default=False, description="Force refresh even if recent snapshot exists"
     )
 
 
 class EcosystemIngestionResponse(BaseModel):
     """Response model for ecosystem ingestion."""
-    
+
     snapshot_id: str
     status: str
     message: str
@@ -52,7 +49,7 @@ class EcosystemIngestionResponse(BaseModel):
 
 class EcosystemHealthResponse(BaseModel):
     """Response model for ecosystem health status."""
-    
+
     overall_score: float
     status: str
     successful_projects: int
@@ -63,7 +60,7 @@ class EcosystemHealthResponse(BaseModel):
 
 class ProjectSummaryResponse(BaseModel):
     """Response model for individual project summary."""
-    
+
     project_name: str
     status: str
     files_processed: int
@@ -75,18 +72,17 @@ class ProjectSummaryResponse(BaseModel):
 
 @router.post("/ingest", response_model=EcosystemIngestionResponse)
 async def ingest_ecosystem(
-    request: EcosystemIngestionRequest,
-    background_tasks: BackgroundTasks
+    request: EcosystemIngestionRequest, background_tasks: BackgroundTasks
 ):
     """
     Ingest the entire ApexSigma ecosystem.
-    
+
     This endpoint scrapes, analyzes, and embeds all four core projects:
     - InGest-LLM.as
-    - memos.as  
+    - memos.as
     - devenviro.as
     - tools.as
-    
+
     The process includes:
     - Repository processing and analysis
     - Code structure documentation
@@ -95,21 +91,21 @@ async def ingest_ecosystem(
     - Ecosystem health assessment
     """
     start_time = datetime.now()
-    
+
     try:
         logger.info("Starting ecosystem ingestion via API")
-        
+
         # Get ecosystem service
         ecosystem_service = get_ecosystem_ingestion_service()
-        
+
         # Execute ecosystem ingestion
         snapshot = await ecosystem_service.ingest_entire_ecosystem(
             include_historical=request.include_historical,
-            generate_cross_analysis=request.generate_cross_analysis
+            generate_cross_analysis=request.generate_cross_analysis,
         )
-        
+
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-        
+
         response = EcosystemIngestionResponse(
             snapshot_id=snapshot.snapshot_id,
             status="completed",
@@ -120,17 +116,16 @@ async def ingest_ecosystem(
             total_size_mb=snapshot.total_size_bytes / (1024 * 1024),
             processing_time_ms=processing_time,
             ecosystem_health_score=snapshot.ecosystem_health.get("overall_score", 0.0),
-            recommendations_count=len(snapshot.recommendations)
+            recommendations_count=len(snapshot.recommendations),
         )
-        
+
         logger.info(f"Ecosystem ingestion completed: {snapshot.snapshot_id}")
         return response
-        
+
     except Exception as e:
         logger.error(f"Ecosystem ingestion failed: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Ecosystem ingestion failed: {str(e)}"
+            status_code=500, detail=f"Ecosystem ingestion failed: {str(e)}"
         )
 
 
@@ -138,7 +133,7 @@ async def ingest_ecosystem(
 async def get_ecosystem_health():
     """
     Get current ecosystem health status.
-    
+
     Returns health metrics across all projects including:
     - Overall health score
     - Individual project status
@@ -148,7 +143,7 @@ async def get_ecosystem_health():
         # This would typically query the latest snapshot from memOS
         # For now, we'll return a placeholder response
         # TODO: Implement memOS query for latest ecosystem health
-        
+
         return EcosystemHealthResponse(
             overall_score=0.85,
             status="healthy",
@@ -156,18 +151,17 @@ async def get_ecosystem_health():
             total_projects=4,
             project_health={
                 "InGest-LLM.as": "excellent",
-                "memos.as": "excellent", 
+                "memos.as": "excellent",
                 "devenviro.as": "good",
-                "tools.as": "good"
+                "tools.as": "good",
             },
-            assessment_timestamp=datetime.now(timezone.utc).isoformat()
+            assessment_timestamp=datetime.now(timezone.utc).isoformat(),
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get ecosystem health: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get ecosystem health: {str(e)}"
+            status_code=500, detail=f"Failed to get ecosystem health: {str(e)}"
         )
 
 
@@ -175,14 +169,14 @@ async def get_ecosystem_health():
 async def get_project_summaries():
     """
     Get summaries of all projects in the ecosystem.
-    
+
     Returns individual project metrics and status information.
     """
     try:
         # This would typically query the latest snapshots from memOS
         # For now, we'll return placeholder data
         # TODO: Implement memOS query for latest project summaries
-        
+
         projects = {
             "InGest-LLM.as": ProjectSummaryResponse(
                 project_name="InGest-LLM.as",
@@ -191,7 +185,7 @@ async def get_project_summaries():
                 size_mb=0.35,
                 complexity_score=8.43,
                 success_rate=1.0,
-                last_updated=datetime.now(timezone.utc).isoformat()
+                last_updated=datetime.now(timezone.utc).isoformat(),
             ),
             "memos.as": ProjectSummaryResponse(
                 project_name="memos.as",
@@ -200,7 +194,7 @@ async def get_project_summaries():
                 size_mb=0.18,
                 complexity_score=6.2,
                 success_rate=1.0,
-                last_updated=datetime.now(timezone.utc).isoformat()
+                last_updated=datetime.now(timezone.utc).isoformat(),
             ),
             "devenviro.as": ProjectSummaryResponse(
                 project_name="devenviro.as",
@@ -209,7 +203,7 @@ async def get_project_summaries():
                 size_mb=0.92,
                 complexity_score=12.1,
                 success_rate=0.95,
-                last_updated=datetime.now(timezone.utc).isoformat()
+                last_updated=datetime.now(timezone.utc).isoformat(),
             ),
             "tools.as": ProjectSummaryResponse(
                 project_name="tools.as",
@@ -218,17 +212,16 @@ async def get_project_summaries():
                 size_mb=0.08,
                 complexity_score=4.5,
                 success_rate=1.0,
-                last_updated=datetime.now(timezone.utc).isoformat()
-            )
+                last_updated=datetime.now(timezone.utc).isoformat(),
+            ),
         }
-        
+
         return projects
-        
+
     except Exception as e:
         logger.error(f"Failed to get project summaries: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get project summaries: {str(e)}"
+            status_code=500, detail=f"Failed to get project summaries: {str(e)}"
         )
 
 
@@ -236,55 +229,56 @@ async def get_project_summaries():
 async def get_ecosystem_snapshot(snapshot_id: str):
     """
     Get a specific ecosystem snapshot by ID.
-    
+
     Returns detailed information about a historical ecosystem snapshot.
     """
     try:
         # TODO: Implement memOS query for specific snapshot
         logger.info(f"Retrieving ecosystem snapshot: {snapshot_id}")
-        
+
         # Placeholder response
         return {
             "snapshot_id": snapshot_id,
             "message": "Snapshot retrieval not yet implemented",
-            "note": "This will query memOS for historical snapshot data"
+            "note": "This will query memOS for historical snapshot data",
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get snapshot {snapshot_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get snapshot: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get snapshot: {str(e)}")
 
 
 @router.get("/analysis/cross-project")
 async def get_cross_project_analysis():
     """
     Get cross-project analysis including dependencies and relationships.
-    
+
     Returns analysis of relationships between ecosystem projects.
     """
     try:
         # TODO: Implement memOS query for latest cross-project analysis
         logger.info("Retrieving cross-project analysis")
-        
+
         # Placeholder response with actual ecosystem relationships
         return {
             "dependency_matrix": {
                 "InGest-LLM.as": ["memOS.as", "LM Studio", "Langfuse"],
                 "memos.as": ["Redis", "PostgreSQL", "Qdrant", "Neo4j"],
                 "devenviro.as": ["memOS.as", "PostgreSQL", "Prometheus", "Grafana"],
-                "tools.as": ["FastAPI", "SQLite"]
+                "tools.as": ["FastAPI", "SQLite"],
             },
             "shared_technologies": [
-                "Python", "FastAPI", "Docker", "PostgreSQL", "Poetry"
+                "Python",
+                "FastAPI",
+                "Docker",
+                "PostgreSQL",
+                "Poetry",
             ],
             "integration_points": [
                 "memOS.as ↔ InGest-LLM.as (memory storage)",
                 "devenviro.as ↔ memOS.as (knowledge queries)",
                 "InGest-LLM.as ↔ devenviro.as (orchestration)",
-                "tools.as ↔ All projects (development workflow)"
+                "tools.as ↔ All projects (development workflow)",
             ],
             "architecture_patterns": [
                 "Microservices architecture",
@@ -292,13 +286,12 @@ async def get_cross_project_analysis():
                 "Multi-tiered memory system",
                 "Observability-first design",
                 "Docker containerization",
-                "FastAPI REST APIs"
-            ]
+                "FastAPI REST APIs",
+            ],
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get cross-project analysis: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get cross-project analysis: {str(e)}"
+            status_code=500, detail=f"Failed to get cross-project analysis: {str(e)}"
         )

@@ -13,12 +13,8 @@ import httpx
 
 # Test configuration
 # Prefer environment variables so tests work both locally and in Docker
-INGEST_API_BASE_URL = os.environ.get(
-    "INGEST_API_BASE_URL", "http://localhost:8000"
-)
-MEMOS_API_BASE_URL = os.environ.get(
-    "INGEST_MEMOS_BASE_URL", "http://localhost:8091"
-)
+INGEST_API_BASE_URL = os.environ.get("INGEST_API_BASE_URL", "http://localhost:8000")
+MEMOS_API_BASE_URL = os.environ.get("INGEST_MEMOS_BASE_URL", "http://localhost:8091")
 REQUEST_TIMEOUT = 30
 
 # NOTE: This comprehensive E2E test suite complements the core integration test
@@ -105,9 +101,7 @@ class TestTextIngestion:
     """Test text ingestion end-to-end flow."""
 
     @pytest.mark.asyncio
-    async def test_basic_text_ingestion(
-        self, sample_text_content, ingestion_metadata
-    ):
+    async def test_basic_text_ingestion(self, sample_text_content, ingestion_metadata):
         """Test basic text ingestion and storage in memOS.as."""
         # Prepare ingestion request
         ingestion_request = {
@@ -138,8 +132,7 @@ class TestTextIngestion:
             assert ingestion_response["total_chunks"] > 0
             assert "results" in ingestion_response
             assert (
-                len(ingestion_response["results"])
-                == ingestion_response["total_chunks"]
+                len(ingestion_response["results"]) == ingestion_response["total_chunks"]
             )
 
             # Validate each result
@@ -198,9 +191,7 @@ class TestTextIngestion:
                 assert result["memory_tier"] == "procedural"
 
     @pytest.mark.asyncio
-    async def test_async_text_ingestion(
-        self, sample_text_content, ingestion_metadata
-    ):
+    async def test_async_text_ingestion(self, sample_text_content, ingestion_metadata):
         """Test asynchronous text ingestion."""
         ingestion_request = {
             "content": sample_text_content,
@@ -230,9 +221,7 @@ class TestMemOSIntegration:
     """Test direct integration with memOS.as."""
 
     @pytest.mark.asyncio
-    async def test_memory_verification(
-        self, sample_text_content, ingestion_metadata
-    ):
+    async def test_memory_verification(self, sample_text_content, ingestion_metadata):
         """Test that ingested content can be verified in memOS.as."""
         # First, ingest content
         ingestion_request = {
@@ -328,9 +317,7 @@ class TestMemOSIntegration:
                         found_content = True
                         break
 
-                assert found_content, (
-                    "Ingested content not found in search results"
-                )
+                assert found_content, "Ingested content not found in search results"
             else:
                 # Log the response for debugging
                 print(
@@ -407,9 +394,7 @@ class TestPerformance:
     """Performance and stress tests."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_ingestion(
-        self, sample_text_content, ingestion_metadata
-    ):
+    async def test_concurrent_ingestion(self, sample_text_content, ingestion_metadata):
         """Test concurrent ingestion requests."""
 
         async def single_ingestion(session_id: int):

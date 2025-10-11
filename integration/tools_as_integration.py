@@ -13,132 +13,124 @@ from typing import Dict, Any
 def generate_eod_command_config() -> Dict[str, Any]:
     """
     Generate the tools.as command configuration for ecosystem EOD updates.
-    
+
     Returns:
         Dict[str, Any]: Command configuration for tools.as
     """
-    
+
     command_config = {
         "name": "eod-ecosystem",
         "description": "End of Day ecosystem update with comprehensive codebase ingestion",
         "version": "1.0.0",
         "category": "ecosystem",
         "tags": ["eod", "ecosystem", "ingestion", "apexsigma"],
-        
         "command": {
             "type": "python_script",
             "script_path": "C:\\Users\\steyn\\ApexSigmaProjects.Dev\\InGest-LLM.as\\scripts\\eod_ecosystem_update.py",
             "working_directory": "C:\\Users\\steyn\\ApexSigmaProjects.Dev\\InGest-LLM.as",
             "environment": "poetry",
-            "timeout_minutes": 30
+            "timeout_minutes": 30,
         },
-        
         "parameters": {
             "force": {
                 "type": "boolean",
                 "default": False,
                 "description": "Force refresh even if recent snapshots exist",
-                "flag": "--force"
+                "flag": "--force",
             },
             "no_historical": {
-                "type": "boolean", 
+                "type": "boolean",
                 "default": False,
                 "description": "Skip storing historical snapshots in memOS",
-                "flag": "--no-historical"
+                "flag": "--no-historical",
             },
             "report_only": {
                 "type": "boolean",
                 "default": False,
                 "description": "Generate daily report without full ingestion",
-                "flag": "--report-only"
-            }
+                "flag": "--report-only",
+            },
         },
-        
         "scheduling": {
             "daily": {
                 "time": "18:00",
-                "description": "Daily ecosystem snapshot at 6 PM"
+                "description": "Daily ecosystem snapshot at 6 PM",
             },
             "weekly": {
                 "day": "sunday",
-                "time": "19:00", 
+                "time": "19:00",
                 "parameters": {"force": True},
-                "description": "Weekly comprehensive ecosystem analysis"
-            }
+                "description": "Weekly comprehensive ecosystem analysis",
+            },
         },
-        
         "outputs": {
             "ecosystem_snapshot": {
                 "type": "json",
                 "description": "Complete ecosystem analysis snapshot",
-                "storage": "memOS.as"
+                "storage": "memOS.as",
             },
             "daily_report": {
                 "type": "markdown",
                 "description": "Human-readable daily ecosystem report",
-                "storage": "local_files"
+                "storage": "local_files",
             },
             "health_metrics": {
                 "type": "metrics",
                 "description": "Ecosystem health and performance metrics",
-                "storage": "prometheus"
-            }
+                "storage": "prometheus",
+            },
         },
-        
         "dependencies": {
             "services": ["InGest-LLM.as", "memOS.as"],
             "external": ["LM Studio", "Langfuse"],
-            "optional": ["Prometheus", "Grafana"]
+            "optional": ["Prometheus", "Grafana"],
         },
-        
         "monitoring": {
             "success_criteria": [
                 "All 4 projects successfully processed",
                 "Ecosystem health score > 0.7",
-                "Historical snapshot stored in memOS"
+                "Historical snapshot stored in memOS",
             ],
             "failure_recovery": [
                 "Retry with --force flag",
                 "Check service dependencies",
-                "Verify memOS connectivity"
+                "Verify memOS connectivity",
             ],
             "notifications": {
                 "success": "Log ecosystem health score and project count",
                 "failure": "Alert if ecosystem health degrades significantly",
-                "warnings": "Notify if individual project processing fails"
-            }
+                "warnings": "Notify if individual project processing fails",
+            },
         },
-        
         "integration": {
             "memOS": {
                 "memory_tiers": ["semantic", "episodic"],
                 "metadata_tags": ["ecosystem", "daily_snapshot", "eod"],
-                "retention_policy": "semantic: permanent, episodic: 30 days"
+                "retention_policy": "semantic: permanent, episodic: 30 days",
             },
             "observability": {
                 "langfuse_tracing": True,
                 "prometheus_metrics": True,
-                "structured_logging": True
-            }
-        }
+                "structured_logging": True,
+            },
+        },
     }
-    
+
     return command_config
 
 
 def generate_ecosystem_workflow_config() -> Dict[str, Any]:
     """
     Generate workflow configuration for comprehensive ecosystem management.
-    
+
     Returns:
         Dict[str, Any]: Workflow configuration
     """
-    
+
     workflow_config = {
         "name": "ecosystem_management",
         "description": "Comprehensive ApexSigma ecosystem management workflow",
         "version": "1.0.0",
-        
         "stages": [
             {
                 "name": "morning_health_check",
@@ -147,7 +139,7 @@ def generate_ecosystem_workflow_config() -> Dict[str, Any]:
                 "command": "eod-ecosystem",
                 "parameters": {"report_only": True},
                 "success_criteria": ["Health report generated"],
-                "on_failure": "notify_team"
+                "on_failure": "notify_team",
             },
             {
                 "name": "development_snapshot",
@@ -156,109 +148,107 @@ def generate_ecosystem_workflow_config() -> Dict[str, Any]:
                 "command": "ingest-repository",
                 "targets": ["current_active_project"],
                 "parameters": {"include_embeddings": True},
-                "conditional": "if development activity detected"
+                "conditional": "if development activity detected",
             },
             {
                 "name": "eod_comprehensive_update",
                 "description": "End of day comprehensive ecosystem update",
-                "schedule": "daily 18:00", 
+                "schedule": "daily 18:00",
                 "command": "eod-ecosystem",
                 "parameters": {"force": False, "include_historical": True},
                 "success_criteria": [
                     "All projects processed",
                     "Historical snapshots stored",
-                    "Health metrics updated"
+                    "Health metrics updated",
                 ],
                 "on_success": "update_team_dashboard",
-                "on_failure": "escalate_to_maintainer"
+                "on_failure": "escalate_to_maintainer",
             },
             {
                 "name": "weekly_deep_analysis",
                 "description": "Weekly comprehensive analysis with comparisons",
                 "schedule": "weekly sunday 19:00",
-                "command": "eod-ecosystem", 
+                "command": "eod-ecosystem",
                 "parameters": {"force": True, "deep_analysis": True},
                 "additional_steps": [
                     "generate_weekly_comparison_report",
                     "analyze_growth_trends",
-                    "update_architecture_documentation"
-                ]
-            }
+                    "update_architecture_documentation",
+                ],
+            },
         ],
-        
         "notifications": {
             "channels": ["slack", "email", "dashboard"],
             "escalation": {
                 "warning": "maintainer",
                 "critical": "team_lead + maintainer",
-                "system_failure": "all_stakeholders"
-            }
+                "system_failure": "all_stakeholders",
+            },
         },
-        
         "data_retention": {
             "daily_snapshots": "30 days",
-            "weekly_snapshots": "1 year", 
+            "weekly_snapshots": "1 year",
             "monthly_snapshots": "permanent",
             "health_metrics": "1 year",
-            "error_logs": "90 days"
-        }
+            "error_logs": "90 days",
+        },
     }
-    
+
     return workflow_config
 
 
 def create_tools_as_integration_files(output_dir: str = "integration_configs") -> None:
     """
     Create integration configuration files for tools.as.
-    
+
     Args:
         output_dir: Directory to store integration files
     """
-    
+
     output_path = Path(output_dir)
     output_path.mkdir(exist_ok=True)
-    
+
     # Generate command configuration
     eod_config = generate_eod_command_config()
     eod_config_path = output_path / "eod_ecosystem_command.json"
-    
-    with open(eod_config_path, 'w', encoding='utf-8') as f:
+
+    with open(eod_config_path, "w", encoding="utf-8") as f:
         json.dump(eod_config, f, indent=2)
-    
+
     print(f"✅ EOD command configuration: {eod_config_path}")
-    
+
     # Generate workflow configuration
     workflow_config = generate_ecosystem_workflow_config()
     workflow_config_path = output_path / "ecosystem_workflow.json"
-    
-    with open(workflow_config_path, 'w', encoding='utf-8') as f:
+
+    with open(workflow_config_path, "w", encoding="utf-8") as f:
         json.dump(workflow_config, f, indent=2)
-    
+
     print(f"✅ Workflow configuration: {workflow_config_path}")
-    
+
     # Generate tools.as TOML command file
     toml_config = generate_tools_as_toml()
     toml_config_path = output_path / "eod_ecosystem.command.as.toml"
-    
-    with open(toml_config_path, 'w', encoding='utf-8') as f:
+
+    with open(toml_config_path, "w", encoding="utf-8") as f:
         f.write(toml_config)
-    
+
     print(f"✅ Tools.as TOML command: {toml_config_path}")
-    
+
     # Generate README for integration
     readme_content = generate_integration_readme()
     readme_path = output_path / "README.md"
-    
-    with open(readme_path, 'w', encoding='utf-8') as f:
+
+    with open(readme_path, "w", encoding="utf-8") as f:
         f.write(readme_content)
-    
+
     print(f"✅ Integration documentation: {readme_path}")
 
 
 def generate_tools_as_toml() -> str:
     """Generate tools.as compatible TOML command configuration."""
-    
-    toml_config = '''# ApexSigma Ecosystem EOD Command Configuration
+
+    toml_config = """# ApexSigma Ecosystem EOD Command Configuration
 # This file integrates ecosystem ingestion into the tools.as command system
 
 [command]
@@ -339,15 +329,15 @@ retention_policy = "semantic: permanent, episodic: 30 days"
 langfuse_tracing = true
 prometheus_metrics = true
 structured_logging = true
-'''
-    
+"""
+
     return toml_config
 
 
 def generate_integration_readme() -> str:
     """Generate README for tools.as integration."""
-    
-    readme_content = '''# Tools.as Integration for Ecosystem Ingestion
+
+    readme_content = """# Tools.as Integration for Ecosystem Ingestion
 
 This directory contains configuration files for integrating ApexSigma ecosystem ingestion into the tools.as command system.
 
@@ -480,8 +470,8 @@ This ecosystem command integrates with:
 - Knowledge management processes
 
 For additional customization and advanced integration patterns, refer to the tools.as documentation and the ApexSigma ecosystem architecture guides.
-'''
-    
+"""
+
     return readme_content
 
 

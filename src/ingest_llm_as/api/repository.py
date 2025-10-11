@@ -100,17 +100,13 @@ async def ingest_python_repository(
                 "max_files": request.max_files,
                 "max_file_size": request.max_file_size,
                 "include_patterns": request.include_patterns,
-                "exclude_patterns": request.exclude_patterns[
-                    :3
-                ],  # First 3 for brevity
+                "exclude_patterns": request.exclude_patterns[:3],  # First 3 for brevity
                 "process_async": request.process_async,
             },
         )
 
     # Record metrics and logging
-    record_ingestion_start(
-        "/ingest/python-repo", "repository", 0
-    )  # Size not known yet
+    record_ingestion_start("/ingest/python-repo", "repository", 0)  # Size not known yet
     log_ingestion_start(
         logger,
         str(ingestion_id),
@@ -134,9 +130,7 @@ async def ingest_python_repository(
     try:
         # Check memOS.as connectivity
         if not await memos_client.health_check():
-            raise HTTPException(
-                status_code=503, detail="memOS.as service unavailable"
-            )
+            raise HTTPException(status_code=503, detail="memOS.as service unavailable")
 
         # Add ingestion ID to metadata for tracking
         request.metadata.custom_fields = request.metadata.custom_fields or {}
@@ -180,9 +174,7 @@ async def ingest_python_repository(
             success_rate = (
                 1.0
                 if response.status == ProcessingStatus.COMPLETED
-                else 0.5
-                if response.status == ProcessingStatus.PENDING
-                else 0.0
+                else 0.5 if response.status == ProcessingStatus.PENDING else 0.0
             )
 
             langfuse_client.client.trace(
@@ -238,9 +230,7 @@ async def ingest_python_repository(
                     "success": False,
                     "error": error_msg,
                     "error_type": type(e).__name__,
-                    "duration_before_error_ms": int(
-                        (time.time() - start_time) * 1000
-                    ),
+                    "duration_before_error_ms": int((time.time() - start_time) * 1000),
                 },
             )
 
@@ -260,16 +250,10 @@ async def ingest_python_repository(
             status_code=503, detail="Memory storage service unavailable"
         )
     except MemOSAPIError as e:
-        logger.error(
-            f"memOS.as API error in repository ingestion {ingestion_id}: {e}"
-        )
-        raise HTTPException(
-            status_code=502, detail="Memory storage service error"
-        )
+        logger.error(f"memOS.as API error in repository ingestion {ingestion_id}: {e}")
+        raise HTTPException(status_code=502, detail="Memory storage service error")
     except Exception as e:
-        logger.error(
-            f"Unexpected error in repository ingestion {ingestion_id}: {e}"
-        )
+        logger.error(f"Unexpected error in repository ingestion {ingestion_id}: {e}")
 
         # Record error in Langfuse
         if langfuse_client.enabled and trace_id:
@@ -279,9 +263,7 @@ async def ingest_python_repository(
                     "success": False,
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "duration_before_error_ms": int(
-                        (time.time() - start_time) * 1000
-                    ),
+                    "duration_before_error_ms": int((time.time() - start_time) * 1000),
                 },
             )
 
@@ -431,20 +413,15 @@ def _perform_repository_analysis(
     python_files = [
         r
         for r in files_processed
-        if r.relative_path.endswith(".py")
-        and r.status == ProcessingStatus.COMPLETED
+        if r.relative_path.endswith(".py") and r.status == ProcessingStatus.COMPLETED
     ]
     documented_files = [
         r for r in python_files if r.elements_extracted > 0
     ]  # Assume extracted elements indicate documentation
-    doc_coverage = (
-        len(documented_files) / len(python_files) if python_files else 0.0
-    )
+    doc_coverage = len(documented_files) / len(python_files) if python_files else 0.0
 
     # Test coverage estimate (presence of test files)
-    test_files = [
-        r for r in files_processed if "test" in r.relative_path.lower()
-    ]
+    test_files = [r for r in files_processed if "test" in r.relative_path.lower()]
     test_coverage_estimate = (
         min(1.0, len(test_files) / len(python_files)) if python_files else 0.0
     )
@@ -475,9 +452,7 @@ def _perform_repository_analysis(
         f for f in summary.largest_files if f.get("size", 0) > 50000
     ]  # > 50KB
     if large_files:
-        suggestions.append(
-            f"Consider splitting {len(large_files)} large files"
-        )
+        suggestions.append(f"Consider splitting {len(large_files)} large files")
         refactoring_opportunities.extend(
             [f"Split large file: {f['path']}" for f in large_files[:3]]
         )

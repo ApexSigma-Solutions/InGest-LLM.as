@@ -1,0 +1,15 @@
+# keploy-ingest-llm.yml
+version: api/v1beta1
+kind: config
+metadata:
+  name: keploy-ingest-llm-config
+spec:
+  path: "./ingest-llm-tests"
+  command: "python -m uvicorn services.ingest_llm.as.app.main:app --host 0.0.0.0 --port 8000"
+  network:
+    filterNoise: true
+    delay: 10
+  test:
+    path: "./ingest-llm-tests/tests"
+    command: "python -m pytest ingest-llm-tests/ -v"
+    delay: 5

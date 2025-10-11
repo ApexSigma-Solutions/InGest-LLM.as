@@ -19,7 +19,7 @@ from ..config import settings
 def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
     """
     Setup structured logging for the application.
-    
+
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
         enable_json: Whether to enable JSON formatting
@@ -32,8 +32,11 @@ def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             add_service_context,
             add_trace_context,
-            structlog.dev.ConsoleRenderer(colors=not enable_json) if not enable_json 
-            else structlog.processors.JSONRenderer()
+            (
+                structlog.dev.ConsoleRenderer(colors=not enable_json)
+                if not enable_json
+                else structlog.processors.JSONRenderer()
+            ),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, log_level.upper())
@@ -41,14 +44,14 @@ def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    
+
     # Configure standard library logging
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
         level=getattr(logging, log_level.upper()),
     )
-    
+
     # Silence noisy third-party loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -57,12 +60,14 @@ def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
 
 def add_service_context(logger, method_name, event_dict):
     """Add service context to log events."""
-    event_dict.update({
-        "service": settings.app_name,
-        "version": settings.app_version,
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "namespace": "apexsigma"
-    })
+    event_dict.update(
+        {
+            "service": settings.app_name,
+            "version": settings.app_version,
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "namespace": "apexsigma",
+        }
+    )
     return event_dict
 
 
@@ -72,20 +77,22 @@ def add_trace_context(logger, method_name, event_dict):
     if current_span:
         span_context = current_span.get_span_context()
         if span_context.is_valid:
-            event_dict.update({
-                "trace_id": format(span_context.trace_id, "032x"),
-                "span_id": format(span_context.span_id, "016x"),
-            })
+            event_dict.update(
+                {
+                    "trace_id": format(span_context.trace_id, "032x"),
+                    "span_id": format(span_context.span_id, "016x"),
+                }
+            )
     return event_dict
 
 
 def get_logger(name: str = __name__) -> structlog.BoundLogger:
     """
     Get a structured logger instance.
-    
+
     Args:
         name: Logger name (usually __name__)
-        
+
     Returns:
         structlog.BoundLogger: Configured logger instance
     """
@@ -97,7 +104,7 @@ def log_ingestion_start(
     ingestion_id: str,
     content_type: str,
     content_size: int,
-    metadata: Dict[str, Any] = None
+    metadata: Dict[str, Any] = None,
 ):
     """Log the start of an ingestion operation."""
     logger.info(
@@ -117,7 +124,7 @@ def log_ingestion_complete(
     duration_ms: int,
     chunks_processed: int = 0,
     memory_tier: str = "semantic",
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
 ):
     """Log the completion of an ingestion operation."""
     log_data = {
@@ -128,10 +135,10 @@ def log_ingestion_complete(
         "chunks_processed": chunks_processed,
         "memory_tier": memory_tier,
     }
-    
+
     if error_message:
         log_data["error_message"] = error_message
-    
+
     if status == "completed":
         logger.info("Ingestion completed successfully", **log_data)
     else:
@@ -146,7 +153,7 @@ def log_memos_request(
     duration_ms: int,
     request_size: Optional[int] = None,
     response_size: Optional[int] = None,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
 ):
     """Log a request to memOS.as service."""
     log_data = {
@@ -157,14 +164,14 @@ def log_memos_request(
         "duration_ms": duration_ms,
         "service": "memOS.as",
     }
-    
+
     if request_size:
         log_data["request_size"] = request_size
     if response_size:
         log_data["response_size"] = response_size
     if error_message:
         log_data["error_message"] = error_message
-    
+
     if 200 <= status_code < 400:
         logger.info("memOS.as request successful", **log_data)
     else:
@@ -177,7 +184,7 @@ def log_content_processing(
     content_size: int,
     chunks_created: int = 0,
     processing_time_ms: int = 0,
-    metadata: Dict[str, Any] = None
+    metadata: Dict[str, Any] = None,
 ):
     """Log content processing operations."""
     logger.info(
@@ -196,7 +203,7 @@ def log_health_check(
     service: str,
     status: str,
     response_time_ms: int,
-    details: Dict[str, Any] = None
+    details: Dict[str, Any] = None,
 ):
     """Log health check results."""
     logger.info(
@@ -211,14 +218,14 @@ def log_health_check(
 
 class IngestionContextFilter:
     """Context filter for ingestion-specific logging."""
-    
+
     def __init__(self, ingestion_id: str):
         self.ingestion_id = ingestion_id
-    
+
     def __enter__(self):
         structlog.contextvars.bind_contextvars(ingestion_id=self.ingestion_id)
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         structlog.contextvars.unbind_contextvars("ingestion_id")
 
@@ -226,5 +233,5 @@ class IngestionContextFilter:
 # Initialize logging on module import
 setup_logging(
     log_level=os.getenv("LOG_LEVEL", "INFO"),
-    enable_json=os.getenv("LOG_JSON", "true").lower() == "true"
+    enable_json=os.getenv("LOG_JSON", "true").lower() == "true",
 )

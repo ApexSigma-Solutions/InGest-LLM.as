@@ -199,9 +199,7 @@ class LMStudioVectorizer:
             quality_score = (
                 1.0
                 if "specialized" in selection_reason
-                else 0.5
-                if "fallback" in selection_reason
-                else 0.3
+                else 0.5 if "fallback" in selection_reason else 0.3
             )
             langfuse_client.score_trace(
                 trace_id=trace_id,
@@ -310,9 +308,9 @@ class LMStudioVectorizer:
                         "total_duration_ms": int(total_duration * 1000),
                         "success": True,
                         "tokens_processed": len(text.split()),
-                        "chars_per_second": len(text) / total_duration
-                        if total_duration > 0
-                        else 0,
+                        "chars_per_second": (
+                            len(text) / total_duration if total_duration > 0 else 0
+                        ),
                     },
                 )
 
@@ -487,9 +485,9 @@ class LMStudioVectorizer:
                             "chars_per_second": chars_per_second,
                             "embeddings_per_second": embeddings_per_second,
                             "total_chars_processed": total_chars,
-                            "avg_chars_per_embedding": total_chars / len(texts)
-                            if texts
-                            else 0,
+                            "avg_chars_per_embedding": (
+                                total_chars / len(texts) if texts else 0
+                            ),
                         },
                     },
                 )

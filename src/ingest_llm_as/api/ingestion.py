@@ -92,9 +92,11 @@ async def ingest_text(
             },
             tags=["ingestion", "text", request.metadata.content_type.value],
             input_data={
-                "content_preview": request.content[:200] + "..."
-                if len(request.content) > 200
-                else request.content,
+                "content_preview": (
+                    request.content[:200] + "..."
+                    if len(request.content) > 200
+                    else request.content
+                ),
                 "metadata": request.metadata.model_dump(),
                 "chunk_size": request.chunk_size,
             },
@@ -444,9 +446,11 @@ async def _process_single_chunk(
             memory_tier=memory_tier,
             content_hash=content_hash,
             chunk_size=len(chunk),
-            status=ProcessingStatus.COMPLETED
-            if storage_response.success
-            else ProcessingStatus.FAILED,
+            status=(
+                ProcessingStatus.COMPLETED
+                if storage_response.success
+                else ProcessingStatus.FAILED
+            ),
         )
         print("DEBUG: Created IngestionResult successfully")
         return result

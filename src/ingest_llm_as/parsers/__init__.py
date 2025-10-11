@@ -9,6 +9,6 @@ from .python_ast_parser import PythonASTParser, CodeElement, CodeElementType
 
 __all__ = [
     "PythonASTParser",
-    "CodeElement", 
+    "CodeElement",
     "CodeElementType",
 ]

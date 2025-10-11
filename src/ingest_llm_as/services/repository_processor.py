@@ -380,9 +380,9 @@ class RepositoryProcessor:
                     "total_files": total_files,
                     "python_files": python_files,
                     "files_to_process": files_to_process,
-                    "discovery_efficiency": files_to_process / total_files
-                    if total_files > 0
-                    else 0,
+                    "discovery_efficiency": (
+                        files_to_process / total_files if total_files > 0 else 0
+                    ),
                 },
             )
 
@@ -596,9 +596,11 @@ class RepositoryProcessor:
                     # Store in memOS
                     storage_response = await memos_client.store_memory(
                         content=chunk,
-                        memory_tier=MemoryTier.PROCEDURAL
-                        if file.is_python
-                        else MemoryTier.SEMANTIC,
+                        memory_tier=(
+                            MemoryTier.PROCEDURAL
+                            if file.is_python
+                            else MemoryTier.SEMANTIC
+                        ),
                         metadata=chunk_metadata,
                         embedding=embedding,
                     )
