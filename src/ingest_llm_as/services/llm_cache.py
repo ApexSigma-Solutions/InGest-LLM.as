@@ -148,6 +148,8 @@ class LLMCache:
             cached_data = await self.redis_client.get(cache_key)
 
             if cached_data:
+                if isinstance(cached_data, bytes):
+                    cached_data = cached_data.decode("utf-8")
                 entry_dict = json.loads(cached_data)
                 entry = CacheEntry.from_dict(entry_dict)
 
@@ -279,6 +281,8 @@ class LLMCache:
                 # Get entry to check timestamp and calculate size
                 cached_data = await self.redis_client.get(key)
                 if cached_data:
+                    if isinstance(cached_data, bytes):
+                        cached_data = cached_data.decode("utf-8")
                     total_size_bytes += len(cached_data.encode())
 
                     try:
@@ -331,6 +335,8 @@ class LLMCache:
                 async for key in self.redis_client.scan_iter(match=pattern):
                     cached_data = await self.redis_client.get(key)
                     if cached_data:
+                        if isinstance(cached_data, bytes):
+                            cached_data = cached_data.decode("utf-8")
                         try:
                             entry_dict = json.loads(cached_data)
                             timestamp = datetime.fromisoformat(entry_dict["timestamp"])

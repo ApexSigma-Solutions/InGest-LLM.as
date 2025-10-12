@@ -133,6 +133,7 @@ class ProjectDocumentationCLI:
                 )
                 print("Use --force to regenerate all documentation")
                 print()
+                return
 
         print("Performing comprehensive ecosystem analysis...")
         print("This may take 3-8 minutes for complete analysis...")

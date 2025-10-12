@@ -149,9 +149,11 @@ class EmbeddingDocumentationCLI:
         if output_dir:
             docs_dir = Path(output_dir)
         else:
-            project_path = (
-                Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev") / project_name
-            )
+            # Construct repo-relative path
+            script_path = Path(__file__).resolve()
+            repo_root = script_path.parent.parent
+            apex_projects_root = repo_root.parent
+            project_path = apex_projects_root / project_name
             docs_dir = project_path / ".md" / ".projects"
 
         docs_dir.mkdir(parents=True, exist_ok=True)
@@ -308,9 +310,10 @@ class EmbeddingDocumentationCLI:
         if output_dir:
             base_dir = Path(output_dir)
         else:
-            base_dir = Path(
-                "C:\\Users\\steyn\\ApexSigmaProjects.Dev\\InGest-LLM.as\\.md\\.projects"
-            )
+            # Construct repo-relative path
+            script_path = Path(__file__).resolve()
+            repo_root = script_path.parent.parent
+            base_dir = repo_root / ".md" / ".projects"
 
         base_dir.mkdir(parents=True, exist_ok=True)
 

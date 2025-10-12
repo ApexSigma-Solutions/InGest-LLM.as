@@ -63,8 +63,8 @@ class LangfuseClient:
                 metadata = metadata or {}
                 metadata.update(input_data)
 
-            trace = self.client.create_trace(name=name, metadata=metadata)
-            return getattr(trace, "id", None)
+            with self.client.start_as_current_span(name=name, metadata=metadata) as trace:
+                return getattr(trace, "id", None)
         except Exception as e:
             print(f"Failed to create trace: {e}")
             return None
@@ -82,14 +82,14 @@ class LangfuseClient:
             return
 
         try:
-            generation = self.client.start_as_current_generation(
+            with self.client.start_as_current_generation(
                 name=name,
                 model=model,
                 input=input_text,
                 output=output_text,
                 metadata=metadata,
-            )
-            return getattr(generation, "id", None)
+            ) as generation:
+                return getattr(generation, "id", None)
         except Exception as e:
             print(f"Failed to create generation: {e}")
             return None

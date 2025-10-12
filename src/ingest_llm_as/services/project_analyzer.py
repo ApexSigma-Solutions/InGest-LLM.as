@@ -11,7 +11,18 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic_settings import BaseSettings
+
 from ..observability.logging import get_logger
+
+
+class ProjectAnalyzerSettings(BaseSettings):
+    """Settings for ProjectAnalyzer."""
+    projects_base_path: Path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+
+    class Config:
+        env_prefix = "PROJECT_"
+
 
 logger = get_logger(__name__)
 
@@ -72,7 +83,8 @@ class QwenProjectAnalyzer:
         self.client = httpx.AsyncClient(timeout=60.0)
 
         # Project paths
-        self.base_path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+        settings = ProjectAnalyzerSettings()
+        self.base_path = settings.projects_base_path
         self.projects = {
             "InGest-LLM.as": self.base_path / "InGest-LLM.as",
             "memos.as": self.base_path / "memos.as",
@@ -301,7 +313,18 @@ Provide only the JSON response, no additional text."""
 
             if response.status_code == 200:
                 result = response.json()
-                return result["choices"][0]["message"]["content"]
+                if (
+                    isinstance(result, dict)
+                    and "choices" in result
+                    and isinstance(result["choices"], list)
+                    and len(result["choices"]) > 0
+                    and "message" in result["choices"][0]
+                    and "content" in result["choices"][0]["message"]
+                ):
+                    return result["choices"][0]["message"]["content"]
+                else:
+                    self.logger.error(f"Unexpected Qwen API response format: {result}")
+                    return ""
             else:
                 self.logger.error(
                     f"Qwen API error: {response.status_code} - {response.text}"

@@ -136,11 +136,10 @@ async def ingest_text(
             )
 
         # Check memOS.as connectivity
-        # Temporarily disabled for debugging
-        # if not await memos_client.health_check():
-        #     raise HTTPException(
-        #         status_code=503, detail="memOS.as service unavailable"
-        #     )
+        if not await memos_client.health_check():
+            raise HTTPException(
+                status_code=503, detail="memOS.as service unavailable"
+            )
 
         # Detect content type for intelligent processing
         detected_type = processor.detect_content_type(

@@ -50,7 +50,7 @@ class EmbeddingEfficiencyAnalyzer:
     def __init__(self):
         """Initialize the analyzer."""
         self.langfuse_client = get_langfuse_client()
-        if not self.langfuse_client.enabled:
+        if not self.langfuse_client.enabled():
             raise RuntimeError(
                 "Langfuse is not enabled. Please configure Langfuse settings."
             )

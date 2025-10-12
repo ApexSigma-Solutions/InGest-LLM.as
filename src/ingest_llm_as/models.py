@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 
 class ContentType(str, Enum):
@@ -251,9 +251,9 @@ class RepositoryIngestionRequest(BaseModel):
     metadata: IngestionMetadata
 
     @field_validator("source_path")
-    def validate_source_path(cls, v, values):
+    def validate_source_path(cls, v, info: ValidationInfo):
         """Validate the source path based on repository source."""
-        repository_source = values.data.get("repository_source")
+        repository_source = info.data.get("repository_source")
 
         if repository_source == RepositorySource.LOCAL_PATH:
             # Validate local path exists

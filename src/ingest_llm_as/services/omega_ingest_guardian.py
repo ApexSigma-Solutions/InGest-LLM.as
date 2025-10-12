@@ -98,12 +98,12 @@ class OmegaIngestGuardian:
                         POMLEntity(
                             entity_id=project.get("id"),
                             entity_type="project",
-                            name=project.find("Name").text,
-                            description=project.find("Description").text,
-                            status=project.find("Status").text,
+                            name=project.findtext("Name") or "",
+                            description=project.findtext("Description") or "",
+                            status=project.findtext("Status") or "",
                             metadata={
                                 "vision": (
-                                    project.find("Vision").text
+                                    project.findtext("Vision")
                                     if project.find("Vision") is not None
                                     else None
                                 ),
