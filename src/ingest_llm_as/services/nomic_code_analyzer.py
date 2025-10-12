@@ -50,7 +50,15 @@ class NomicCodeAnalyzer:
     """
 
     def __init__(self, base_url: str = "http://172.22.144.1:12345/v1"):
-        """Initialize the Nomic analyzer."""
+        """
+        Create a NomicCodeAnalyzer configured to communicate with a Nomic embedding service.
+        
+        Parameters:
+            base_url (str): Base URL of the embedding service API used to request embeddings (default: "http://172.22.144.1:12345/v1"). 
+        
+        Description:
+            Initializes the instance-level resources used for analysis, including a logger, an asynchronous HTTP client, configured project paths, and an in-memory embeddings cache.
+        """
         self.base_url = base_url
         self.logger = get_logger(__name__)
         self.client = httpx.AsyncClient(timeout=60.0)
@@ -69,10 +77,12 @@ class NomicCodeAnalyzer:
 
     async def analyze_all_projects(self) -> Dict[str, ProjectAnalysis]:
         """
-        Analyze all ApexSigma projects using code embeddings.
-
+        Run embedding-based analysis for all configured ApexSigma projects.
+        
+        Iterates the analyzer's configured project paths, generates embeddings for each existing project, and produces a ProjectAnalysis for each project that yielded embeddings.
+        
         Returns:
-            Dict[str, ProjectAnalysis]: Analysis for each project
+            Dict[str, ProjectAnalysis]: Mapping from project name to its analysis; projects with no embeddings are not included.
         """
         self.logger.info("Starting embedding-based project analysis")
 
@@ -101,7 +111,18 @@ class NomicCodeAnalyzer:
     async def _generate_project_embeddings(
         self, project_name: str, project_path: Path
     ) -> List[CodeEmbedding]:
-        """Generate embeddings for all code in a project."""
+        """
+        Generate embeddings for representative code and key configuration files within a project.
+        
+        Scans the project's Python files (up to 20 files) and selected config files, reads their text (UTF-8, errors ignored), and produces a CodeEmbedding for each file that is processed. Files larger than 100 KB or with fewer than 50 non-whitespace characters are skipped; pyproject.toml, README.md, and docker-compose.yml are included when present and smaller than 50 KB. Each embedding includes a relative file path, a content hash, a content type, the originating project name, and metadata such as file size, line count, and simple presence flags (classes, functions, imports, is_main).
+        
+        Parameters:
+            project_name (str): Name of the project to attribute to generated embeddings.
+            project_path (Path): Filesystem path to the root of the project to scan.
+        
+        Returns:
+            List[CodeEmbedding]: A list of generated CodeEmbedding objects for the files that were successfully processed.
+        """
 
         embeddings = []
 
@@ -173,7 +194,15 @@ class NomicCodeAnalyzer:
         return embeddings
 
     async def _generate_embedding(self, content: str) -> Optional[List[float]]:
-        """Generate embedding using Nomic model."""
+        """
+        Request an embedding for the given code/text content using the Nomic `nomic-embed-code-i1` model.
+        
+        Parameters:
+            content (str): The text or code to embed. Content longer than 8000 characters will be truncated.
+        
+        Returns:
+            Optional[List[float]]: The embedding vector as a list of floats if successful, `None` on failure or error.
+        """
 
         try:
             # Truncate content if too long (Nomic models have token limits)
@@ -205,7 +234,22 @@ class NomicCodeAnalyzer:
         return None
 
     def _classify_content_type(self, content: str) -> str:
-        """Classify the type of code content."""
+        """
+        Classifies a block of code into a concise content-type label based on simple heuristics.
+        
+        Parameters:
+            content (str): The source text of a code file or fragment to classify.
+        
+        Returns:
+            content_type (str): One of:
+                - "class_module": contains both class and function definitions
+                - "main_module": contains functions and an application entry point (`if __name__`)
+                - "api_module": contains web/API indicators (e.g., `@app.route`, `@router.`, or `fastapi`)
+                - "class_definition": contains class definitions but no functions
+                - "function_module": contains function definitions but no classes
+                - "utility_module": contains imports and is short (fewer than 50 lines)
+                - "general_module": none of the above heuristics matched
+        """
 
         content_lower = content.lower()
 
@@ -234,7 +278,17 @@ class NomicCodeAnalyzer:
         embeddings: List[CodeEmbedding],
         all_project_embeddings: Dict[str, List[CodeEmbedding]],
     ) -> ProjectAnalysis:
-        """Analyze a project based on its embeddings."""
+        """
+        Produce a ProjectAnalysis summarizing a project's structure, detected patterns, inferred architecture, core components, dependencies, and similarity scores against other projects.
+        
+        Parameters:
+            project_name (str): Name of the project being analyzed.
+            embeddings (List[CodeEmbedding]): Embedding records for files in the project; used to infer content types, metadata flags, and build core components.
+            all_project_embeddings (Dict[str, List[CodeEmbedding]]): Embeddings for other projects used to compute pairwise similarity scores.
+        
+        Returns:
+            ProjectAnalysis: Analysis containing the project's name, a short description, inferred architecture_type (e.g., "microservice", "monolith", "library", "tool"), a list of up to five core_components (each with name, type, and short description), detected api_patterns, inferred dependencies, and similarity_scores mapping other project names to cosine similarity values.
+        """
 
         # Calculate similarity scores with other projects
         similarity_scores = {}
@@ -305,7 +359,12 @@ class NomicCodeAnalyzer:
     def _calculate_project_similarity(
         self, embeddings1: List[CodeEmbedding], embeddings2: List[CodeEmbedding]
     ) -> float:
-        """Calculate similarity between two projects based on embeddings."""
+        """
+        Compute a cosine similarity score between two projects by averaging their code embeddings.
+        
+        Returns:
+            similarity (float): Cosine similarity in the range -1.0 to 1.0; returns 0.0 if either embedding list is empty or if either averaged embedding has zero magnitude.
+        """
 
         if not embeddings1 or not embeddings2:
             return 0.0
@@ -331,7 +390,17 @@ class NomicCodeAnalyzer:
         embeddings: List[CodeEmbedding],
         content_types: List[str],
     ) -> str:
-        """Generate a description based on embedding analysis."""
+        """
+        Create a short, human-readable description of a project derived from its code embeddings and classified content types.
+        
+        Parameters:
+            project_name (str): The project's name used for context in description (not required to be unique).
+            embeddings (List[CodeEmbedding]): Embedding records for the project's files; used to infer file counts and metadata flags (e.g., presence of classes).
+            content_types (List[str]): Classified content type labels for the project's files (e.g., "api_module", "class_module", "main_module").
+        
+        Returns:
+            str: A concise description summarizing the project's size and prominent characteristics (for example: API presence, object-oriented design, entry point, or lightweight tool).
+        """
 
         # Count different types of content
         type_counts = {}
@@ -357,7 +426,17 @@ class NomicCodeAnalyzer:
     async def generate_embedding_analysis_report(
         self, analyses: Dict[str, ProjectAnalysis]
     ) -> str:
-        """Generate a comprehensive analysis report."""
+        """
+        Compose a Markdown report summarizing embedding-based analyses across projects.
+        
+        The report includes per-project summaries (type, description, core components count, API patterns), a pairwise project similarity matrix, and integration insights that identify the most similar project for each entry.
+        
+        Parameters:
+            analyses (Dict[str, ProjectAnalysis]): Mapping from project name to its analysis result; each ProjectAnalysis supplies fields used to build summaries and similarity values.
+        
+        Returns:
+            report (str): Markdown-formatted analysis report.
+        """
 
         report = "# ApexSigma Ecosystem - Code Embedding Analysis\n\n"
         report += "**Analysis Method**: Nomic Code Embeddings (nomic-embed-code-i1)\n"
@@ -406,7 +485,9 @@ class NomicCodeAnalyzer:
         return report
 
     async def close(self):
-        """Close the HTTP client."""
+        """
+        Close the analyzer's internal HTTP client and release its resources.
+        """
         await self.client.aclose()
 
 
@@ -415,7 +496,12 @@ _nomic_analyzer: Optional[NomicCodeAnalyzer] = None
 
 
 def get_nomic_code_analyzer() -> NomicCodeAnalyzer:
-    """Get the global Nomic code analyzer instance."""
+    """
+    Return the global NomicCodeAnalyzer singleton used by the module.
+    
+    Returns:
+        NomicCodeAnalyzer: The shared analyzer instance; creates and caches a new instance if none exists.
+    """
     global _nomic_analyzer
     if _nomic_analyzer is None:
         _nomic_analyzer = NomicCodeAnalyzer()

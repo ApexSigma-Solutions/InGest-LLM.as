@@ -86,7 +86,11 @@ class ProgressLogger:
     """
 
     def __init__(self):
-        """Initialize the progress logger."""
+        """
+        Initialize the ProgressLogger instance.
+        
+        Creates an internal logger, obtains Langfuse and memOS clients, and initializes the in-memory mapping for tracking progress entries by ingestion ID.
+        """
         self.logger = get_logger(__name__)
         self.langfuse_client = get_langfuse_client()
         self.memos_client = get_memos_client()
@@ -96,11 +100,13 @@ class ProgressLogger:
         self, ingestion_id: str, request: RepositoryIngestionRequest
     ) -> None:
         """
-        Start logging for a repository ingestion process.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-            request: Repository ingestion request
+        Initialize and record the initial progress entry for a repository ingestion.
+        
+        Creates an initial ProgressLogEntry with stage "initialization", status "started", 0% progress, and zero files, stores it in the in-memory progress map for the given ingestion_id, and persists it to memOS.
+        
+        Parameters:
+            ingestion_id (str): Unique identifier for the ingestion.
+            request (RepositoryIngestionRequest): Request used to populate initial entry details such as `repository_source`, `source_path`, `max_files`, `include_patterns`, and a truncated `exclude_patterns`.
         """
         timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -140,13 +146,15 @@ class ProgressLogger:
         discovery_time_ms: int,
     ) -> None:
         """
-        Log completion of file discovery phase.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-            files_discovered: Total files discovered
-            files_to_process: Files that will be processed
-            discovery_time_ms: Discovery time in milliseconds
+        Record completion of the repository discovery phase for an ingestion.
+        
+        Creates a ProgressLogEntry for the discovery stage, appends it to the in-memory progress history for the given ingestion_id, and persists the entry to memOS. The entry contains discovery metrics and a discovery efficiency value.
+        
+        Parameters:
+            ingestion_id (str): Unique ingestion identifier.
+            files_discovered (int): Total number of files discovered during discovery.
+            files_to_process (int): Number of files selected for processing.
+            discovery_time_ms (int): Time taken for discovery in milliseconds.
         """
         timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -184,14 +192,14 @@ class ProgressLogger:
         file_result: Optional[FileProcessingResult] = None,
     ) -> None:
         """
-        Log progress of individual file processing.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-            current_file: Currently processing file
-            files_processed: Number of files processed so far
-            total_files: Total files to process
-            file_result: Optional processing result for the file
+        Record progress for a single file during ingestion, append an in-memory progress entry, and persist significant updates to memOS.
+        
+        Creates a ProgressLogEntry for the "processing" stage (progress is computed as 10% discovery plus up to 80% processing), appends it to the ingestion's in-memory history, and calls persistent storage for significant milestones (every 10% of total progress or every 10 files). If a FileProcessingResult is provided, its metrics and any error_message are included in the entry's details.
+         
+        Parameters:
+            file_result (Optional[FileProcessingResult]): Optional result object whose fields (file_size, elements_extracted,
+                chunks_created, embeddings_generated, processing_time_ms, complexity_score, error_message) are added to the
+                progress details when present.
         """
         timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -252,12 +260,15 @@ class ProgressLogger:
         structure_analysis: Optional[CodeStructureAnalysis] = None,
     ) -> None:
         """
-        Log completion of repository ingestion.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-            response: Final ingestion response
-            structure_analysis: Optional code structure analysis
+        Record the final progress for a completed repository ingestion and persist a comprehensive ingestion report.
+        
+        Parameters:
+            ingestion_id (str): Unique identifier for the ingestion run.
+            response (RepositoryIngestionResponse): Final ingestion response containing timing, discovery and processing summaries, and lists of processed files.
+            structure_analysis (Optional[CodeStructureAnalysis]): Optional code-structure analysis to include in the stored ingestion report.
+        
+        Notes:
+            This creates a completion progress entry (100% progress), persists it to memory storage, and stores a combined ingestion report that may include the provided code structure analysis.
         """
         timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -297,12 +308,14 @@ class ProgressLogger:
         self, ingestion_id: str, error_message: str, stage: str = "unknown"
     ) -> None:
         """
-        Log ingestion error.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-            error_message: Error description
-            stage: Stage where error occurred
+        Record a failed ingestion event and persist a corresponding progress entry.
+        
+        Creates a ProgressLogEntry with status "failed" for the given ingestion, appends it to the in-memory progress history for that ingestion, persists the entry to persistent storage, and logs an error message.
+        
+        Parameters:
+            ingestion_id (str): Unique identifier for the ingestion run.
+            error_message (str): Human-readable description of the error that occurred.
+            stage (str): Ingestion stage where the error occurred (defaults to "unknown").
         """
         timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -329,14 +342,14 @@ class ProgressLogger:
         self, repository_path: str, file_results: List[FileProcessingResult]
     ) -> CodeStructureAnalysis:
         """
-        Generate comprehensive code structure analysis.
-
-        Args:
-            repository_path: Path to repository
-            file_results: Results from file processing
-
+        Produce a comprehensive analysis of a repository's code structure and metrics.
+        
+        Parameters:
+            repository_path (str): Filesystem path to the repository root being analyzed.
+            file_results (List[FileProcessingResult]): List of file processing results used to compute metrics and structure.
+        
         Returns:
-            CodeStructureAnalysis: Comprehensive analysis
+            CodeStructureAnalysis: Analysis including totals (files, lines, functions, classes), average complexity, file type distribution, directory tree, top-level modules, complexity distribution, largest files, most complex functions, an empty dependencies map (AST-based dependency extraction not performed), and generated recommendations.
         """
         analysis_timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -434,18 +447,25 @@ class ProgressLogger:
         self, ingestion_id: str
     ) -> Optional[List[ProgressLogEntry]]:
         """
-        Get current progress status for an ingestion.
-
-        Args:
-            ingestion_id: Unique ingestion identifier
-
+        Retrieve the list of progress log entries for a given ingestion.
+        
         Returns:
-            Optional[List[ProgressLogEntry]]: Progress entries if found
+            List[ProgressLogEntry] of entries for the ingestion, or `None` if no entries exist.
         """
         return self.progress_entries.get(ingestion_id)
 
     async def _store_progress_entry(self, entry: ProgressLogEntry) -> None:
-        """Store progress entry in memOS."""
+        """
+        Persist a progress log entry to memOS as an episodic memory.
+        
+        Formats the ProgressLogEntry into human-readable content, attaches metadata
+        (ingestion_id, stage, status, progress_percentage, timestamp, entry_type),
+        and stores it via the memos_client. Any exceptions raised during storage are
+        caught and result in a warning log rather than being propagated.
+        
+        Parameters:
+            entry (ProgressLogEntry): The progress entry to format and persist.
+        """
         try:
             content = f"Repository Ingestion Progress - {entry.stage.title()}\n\n"
             content += f"Ingestion ID: {entry.ingestion_id}\n"
@@ -487,7 +507,19 @@ class ProgressLogger:
         response: RepositoryIngestionResponse,
         structure_analysis: Optional[CodeStructureAnalysis],
     ) -> None:
-        """Store comprehensive ingestion report in memOS."""
+        """
+        Builds a human-readable ingestion report and stores it (and optional code structure analysis) in memOS as semantic memory entries.
+        
+        Parameters:
+            ingestion_id (str): Unique identifier for the ingestion run.
+            response (RepositoryIngestionResponse): Aggregated ingestion result containing repository path, timings, file counts, status, and optional processing summary.
+            structure_analysis (Optional[CodeStructureAnalysis]): Optional code structure analysis to store as a separate semantic memory entry.
+        
+        Notes:
+            - The function creates a textual report summarizing processing metrics, detailed analysis (if available), code structure recommendations (if provided), and recent progress history, then stores it in memOS with metadata.
+            - If a CodeStructureAnalysis is provided, a separate semantic memory entry containing the serialized analysis is also stored.
+            - Any exceptions raised while storing memories are caught and a warning is logged; errors are not re-raised.
+        """
         try:
             # Create comprehensive report
             content = f"Repository Ingestion Report\n{'='*50}\n\n"
@@ -586,19 +618,44 @@ class ProgressLogger:
             self.logger.warning(f"Failed to store ingestion report in memOS: {e}")
 
     def _estimate_lines_of_code(self, file_result: FileProcessingResult) -> int:
-        """Estimate lines of code based on file size and type."""
+        """
+        Estimate the number of source code lines in a file.
+        
+        Parameters:
+            file_result (FileProcessingResult): Metadata for the processed file; this function uses the file_size (in bytes) to compute the estimate.
+        
+        Returns:
+            lines_estimate (int): Estimated lines of code computed from file_size assuming ~50 characters per line; always at least 1.
+        """
         # Rough estimate: ~50 chars per line average
         return max(1, file_result.file_size // 50)
 
     def _estimate_classes(self, file_result: FileProcessingResult) -> int:
-        """Estimate number of classes (rough approximation)."""
+        """
+        Estimate the number of classes in a processed file using a simple heuristic.
+        
+        Parameters:
+            file_result (FileProcessingResult): Processing result whose `elements_extracted` field is used by the heuristic.
+        
+        Returns:
+            int: Estimated number of classes (>= 0), computed as 20% of `elements_extracted`, rounded down.
+        """
         # Assume ~20% of elements are classes (very rough)
         return max(0, int(file_result.elements_extracted * 0.2))
 
     def _build_directory_structure(
         self, repository_path: str, file_results: List[FileProcessingResult]
     ) -> RepositoryStructureNode:
-        """Build directory structure tree."""
+        """
+        Create a simplified directory-tree representation for a repository and its processed files.
+        
+        Parameters:
+            repository_path (str): Path to the repository root used as the root node name and path.
+            file_results (List[FileProcessingResult]): File processing results used to create file nodes (each becomes a child node).
+        
+        Returns:
+            RepositoryStructureNode: Root directory node representing the repository with child file nodes summarizing each file's size, estimated line count, and complexity.
+        """
         root = RepositoryStructureNode(
             name=Path(repository_path).name,
             type="directory",
@@ -632,7 +689,21 @@ class ProgressLogger:
     def _extract_top_level_modules(
         self, file_results: List[FileProcessingResult]
     ) -> List[Dict[str, Any]]:
-        """Extract top-level modules from file results."""
+        """
+        Identify top-level Python modules from processed file results and return their key metrics sorted by element count.
+        
+        Parameters:
+            file_results (List[FileProcessingResult]): List of file processing results to inspect.
+        
+        Returns:
+            List[Dict[str, Any]]: Up to 20 dictionaries for files that are top-level Python modules (no subdirectory, `.py` extension). Each dictionary contains:
+                - `name`: module name (filename without extension)
+                - `path`: relative path to the file
+                - `elements`: number of extracted elements
+                - `complexity`: complexity score
+                - `size`: file size in bytes
+            The list is sorted by `elements` in descending order.
+        """
         modules = []
         for result in file_results:
             if result.relative_path.endswith(".py") and "/" not in result.relative_path:
@@ -650,7 +721,19 @@ class ProgressLogger:
     def _calculate_complexity_distribution(
         self, complexities: List[float]
     ) -> Dict[str, int]:
-        """Calculate complexity distribution ranges."""
+        """
+        Summarizes a list of numeric complexity scores into predefined complexity bands.
+        
+        Parameters:
+            complexities (List[float]): Numeric complexity scores for functions or files.
+        
+        Returns:
+            distribution (Dict[str, int]): Mapping from band name to count:
+                - "low (0-2)": count of scores <= 2
+                - "medium (2-5)": count of scores > 2 and <= 5
+                - "high (5-10)": count of scores > 5 and <= 10
+                - "very_high (10+)": count of scores > 10
+        """
         if not complexities:
             return {}
 
@@ -680,7 +763,18 @@ class ProgressLogger:
         file_type_distribution: Dict[str, int],
         largest_files: List[Dict[str, Any]],
     ) -> List[str]:
-        """Generate recommendations based on analysis."""
+        """
+        Generate a list of actionable recommendations for improving repository maintainability and testing based on aggregate metrics.
+        
+        Parameters:
+            total_files (int): Total number of files analyzed in the repository.
+            average_complexity (float): Average complexity score computed across analyzed files/functions.
+            file_type_distribution (Dict[str, int]): Mapping of file extension or type to counts (e.g., {".py": 120, ".md": 10}).
+            largest_files (List[Dict[str, Any]]): List of file descriptors sorted by size descending; each item should include at least `"path"` and `"size"`.
+        
+        Returns:
+            List[str]: A list of human-readable recommendation strings derived from thresholds such as complexity, repository size, dominant file types, large file detection, and relative test-file coverage.
+        """
         recommendations = []
 
         if average_complexity > 7:

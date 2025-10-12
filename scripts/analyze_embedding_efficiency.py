@@ -48,7 +48,12 @@ class EmbeddingEfficiencyAnalyzer:
     """Analyzer for embedding model efficiency using Langfuse data."""
 
     def __init__(self):
-        """Initialize the analyzer."""
+        """
+        Initialize the analyzer by acquiring a Langfuse client and validating it is enabled.
+        
+        Raises:
+            RuntimeError: If the Langfuse client is not enabled or not configured.
+        """
         self.langfuse_client = get_langfuse_client()
         if not self.langfuse_client.enabled:
             raise RuntimeError(
@@ -59,13 +64,13 @@ class EmbeddingEfficiencyAnalyzer:
         self, hours_back: int = 24
     ) -> List[ModelPerformanceMetrics]:
         """
-        Analyze model performance over the specified time period.
-
-        Args:
-            hours_back: Number of hours to look back for analysis
-
+        Aggregate embedding-generation traces and compute per-model performance metrics for a trailing time window.
+        
+        Parameters:
+        	hours_back (int): Number of hours to include in the analysis (look-back window).
+        
         Returns:
-            List[ModelPerformanceMetrics]: Performance metrics for each model
+        	List[ModelPerformanceMetrics]: Per-model aggregated metrics (sorted by average embedding efficiency, descending). Returns an empty list if an error occurs or no performance data is available.
         """
         print(
             f"🔍 Analyzing embedding model performance for the last {hours_back} hours..."
@@ -192,13 +197,15 @@ class EmbeddingEfficiencyAnalyzer:
         self, hours_back: int = 24
     ) -> List[ContentTypeAnalysis]:
         """
-        Analyze model performance by content type.
-
-        Args:
-            hours_back: Number of hours to look back for analysis
-
+        Analyze embedding model performance grouped by content type over a recent time window.
+        
+        Collects per-model statistics for each content type (calls, success rate, average chars/sec, average duration, average embedding efficiency, and error count) based on embedding_generation traces from Langfuse.
+        
+        Parameters:
+        	hours_back (int): Number of hours before now to include in the analysis.
+        
         Returns:
-            List[ContentTypeAnalysis]: Performance analysis by content type
+        	List[ContentTypeAnalysis]: A list of ContentTypeAnalysis objects, one per content type, each containing per-model ModelPerformanceMetrics, the best model for that content type, and the best average efficiency as avg_confidence. If an error occurs, returns an empty list.
         """
         print(
             f"📊 Analyzing content type performance for the last {hours_back} hours..."
@@ -328,13 +335,15 @@ class EmbeddingEfficiencyAnalyzer:
 
     def generate_efficiency_report(self, hours_back: int = 24) -> str:
         """
-        Generate a comprehensive efficiency report.
-
-        Args:
-            hours_back: Number of hours to analyze
-
+        Generate a human-readable efficiency report for embedding models over a recent time window.
+        
+        The report contains overall model performance, per-content-type comparisons, and optimization recommendations.
+        
+        Parameters:
+            hours_back (int): Number of hours to include in the analysis window.
+        
         Returns:
-            str: Formatted efficiency report
+            str: A formatted multi-line string containing the complete efficiency report.
         """
         model_metrics = self.analyze_model_performance(hours_back)
         content_analyses = self.analyze_content_type_performance(hours_back)
@@ -443,14 +452,14 @@ class EmbeddingEfficiencyAnalyzer:
         self, hours_back: int = 24, output_file: str = "embedding_metrics.json"
     ) -> bool:
         """
-        Export metrics to JSON file for further analysis.
-
-        Args:
-            hours_back: Number of hours to analyze
-            output_file: Output JSON file path
-
+        Write aggregated embedding-model and content-type performance metrics to a JSON file.
+        
+        Parameters:
+            hours_back (int): Time window in hours to analyze (trailing window from now).
+            output_file (str): Path to the output JSON file to create or overwrite.
+        
         Returns:
-            bool: True if export successful
+            bool: `True` if metrics were successfully written to the file, `False` otherwise.
         """
         try:
             model_metrics = self.analyze_model_performance(hours_back)
@@ -503,7 +512,11 @@ class EmbeddingEfficiencyAnalyzer:
 
 
 def main():
-    """Main function for the analyzer script."""
+    """
+    Run the analyzer: generate a 24-hour efficiency report and export metrics to JSON.
+    
+    Initializes an EmbeddingEfficiencyAnalyzer, prints a human-readable efficiency report for the last 24 hours, writes metrics to "embedding_efficiency_metrics.json", and prints completion status. Exits the process with a non-zero code if an unhandled exception occurs.
+    """
     print("🚀 Embedding Model Efficiency Analyzer")
     print("=" * 40)
 

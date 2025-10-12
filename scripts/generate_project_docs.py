@@ -27,14 +27,29 @@ class ProjectDocumentationCLI:
     """Command-line interface for project documentation generation."""
 
     def __init__(self):
-        """Initialize the CLI."""
+        """
+        Initialize the ProjectDocumentationCLI, acquiring a project documentation generator and recording the start time.
+        
+        Attributes:
+            doc_generator: The project documentation generator used to produce documentation.
+            start_time: Timestamp captured at initialization for measuring execution duration.
+        """
         self.doc_generator = get_project_documentation_generator()
         self.start_time = datetime.now()
 
     async def run_documentation_generation(
         self, project_name: str = None, generate_all: bool = False, force: bool = False
     ) -> None:
-        """Run documentation generation."""
+        """
+        Coordinate generation of project documentation according to the provided options.
+        
+        If `project_name` is given, generate documentation for that project. If `generate_all` is true, generate documentation for all projects. If neither is provided, the function prints a prompt and returns without generating. Progress and completion information (including execution time) are printed to stdout. Any exceptions are caught and reported, and the documentation generator is always closed on exit.
+        
+        Parameters:
+            project_name (str | None): Name of the target project to generate docs for. Mutually exclusive with `generate_all`.
+            generate_all (bool): When true, generate documentation for all available projects.
+            force (bool): When true, overwrite existing documentation rather than skipping existing outputs.
+        """
 
         print("=" * 80)
         print("APEXSIGMA PROJECT DOCUMENTATION GENERATOR")
@@ -69,7 +84,15 @@ class ProjectDocumentationCLI:
     async def _generate_single_project_docs(
         self, project_name: str, force: bool
     ) -> None:
-        """Generate documentation for a single project."""
+        """
+        Generate documentation for a single project and report results to the console.
+        
+        If the given project name is not one of the known projects, the function prints an error and returns without generating anything. If documentation already exists in the project's .md/.projects directory and `force` is False, the function prints a message and returns without regenerating. Otherwise, it performs analysis and creates or updates the project's documentation files, then prints the output location and a summary of generated files.
+        
+        Parameters:
+            project_name (str): Name of the target project (must be one of the available projects).
+            force (bool): If True, regenerate documentation even when files already exist.
+        """
 
         print(f"GENERATING DOCUMENTATION FOR: {project_name}")
         print("-" * 50)
@@ -110,7 +133,14 @@ class ProjectDocumentationCLI:
             print(f"❌ Failed to generate documentation for {project_name}")
 
     async def _generate_all_project_docs(self, force: bool) -> None:
-        """Generate documentation for all projects."""
+        """
+        Generate documentation for every known project, running a comprehensive ecosystem analysis and printing per-project status and a summary.
+        
+        If `force` is False, lists any projects that already have documentation and advises using force to regenerate; otherwise proceeds to regenerate all documentation. Prints progress messages, per-project success/failure, and a final summary.
+        
+        Parameters:
+            force (bool): If True, regenerate documentation even when existing docs are present; if False, warn about existing documentation and suggest using `--force`.
+        """
 
         print("GENERATING DOCUMENTATION FOR ALL PROJECTS")
         print("-" * 45)
@@ -171,7 +201,15 @@ class ProjectDocumentationCLI:
             print(f"❌ Failed to generate for: {', '.join(failed_projects)}")
 
     def _show_generated_files(self, docs_dir: Path, project_name: str) -> None:
-        """Show the generated files."""
+        """
+        Print a summary of expected documentation files for a project and how to view them.
+        
+        Prints which of the project's expected files exist in `docs_dir`, reporting file sizes for present files and marking missing files, then prints short usage hints for viewing the outline, diagram, and data.
+        
+        Parameters:
+            docs_dir (Path): Directory where the project's documentation files are stored.
+            project_name (str): Project name used to derive the filename prefix (lowercased with dots replaced by underscores).
+        """
 
         project_prefix = project_name.lower().replace(".", "_")
 
@@ -204,7 +242,11 @@ class ProjectDocumentationCLI:
 
 
 async def main():
-    """Main entry point."""
+    """
+    Parse command-line arguments and coordinate generation of project documentation.
+    
+    Parses --project, --all, and --force options, validates their combination, constructs a ProjectDocumentationCLI instance, and invokes its documentation generation workflow for the requested project(s).
+    """
 
     parser = argparse.ArgumentParser(
         description="Generate AI-powered project documentation",

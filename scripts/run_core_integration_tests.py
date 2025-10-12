@@ -23,12 +23,29 @@ class CoreIntegrationTestRunner:
     """Runner for core integration tests."""
 
     def __init__(self):
+        """
+        Initialize filesystem paths used by the test runner.
+        
+        Sets `self.script_dir` to the directory containing this module, `self.project_root` to its parent directory, and `self.test_file` to the project's tests/test_memos_integration_core.py path.
+        """
         self.script_dir = Path(__file__).parent
         self.project_root = self.script_dir.parent
         self.test_file = self.project_root / "tests" / "test_memos_integration_core.py"
 
     async def check_service_health(self, url: str, service_name: str) -> Dict:
-        """Check if a service is healthy."""
+        """
+        Query a service's /health endpoint and report its availability and status.
+        
+        Parameters:
+            url (str): Base URL of the service (e.g., "http://localhost:8000").
+            service_name (str): Human-readable name used in the returned report.
+        
+        Returns:
+            dict: A report describing the service health. Possible forms:
+                - {"status": "healthy", "service": service_name, "data": <parsed JSON>}
+                - {"status": "unhealthy", "service": service_name, "code": <HTTP status code>}
+                - {"status": "unreachable", "service": service_name, "error": <error message>}
+        """
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(f"{url}/health")
@@ -50,7 +67,12 @@ class CoreIntegrationTestRunner:
             return {"status": "unreachable", "service": service_name, "error": str(e)}
 
     async def validate_services(self) -> bool:
-        """Validate that required services are available."""
+        """
+        Check that the configured external services report healthy status.
+        
+        Returns:
+            bool: `True` if all required services report healthy, `False` otherwise.
+        """
         print("🔍 Validating ApexSigma service ecosystem...")
         print("=" * 50)
 
@@ -78,7 +100,15 @@ class CoreIntegrationTestRunner:
         return all_healthy
 
     def run_tests(self, verbose: bool = True) -> bool:
-        """Run the core integration test suite."""
+        """
+        Run the core integration pytest suite for the configured test file.
+        
+        Parameters:
+        	verbose (bool): When True, add pytest verbosity flags (`-v`, `-s`) to the test command.
+        
+        Returns:
+        	bool: `True` if the test process exits with status code 0 (all tests passed), `False` otherwise.
+        """
         cmd = ["python", "-m", "pytest", str(self.test_file)]
 
         if verbose:
@@ -93,7 +123,14 @@ class CoreIntegrationTestRunner:
         return result.returncode == 0
 
     async def run_core_integration_tests(self) -> bool:
-        """Run the complete core integration test suite."""
+        """
+        Run the core integration sequence that validates required services and executes the pytest suite.
+        
+        Performs service health validation and, if successful, runs the core integration tests; prints progress and results.
+        
+        Returns:
+            True if all integration tests passed, False otherwise.
+        """
         print("🚀 APEXSIGMA CORE INTEGRATION TEST RUNNER")
         print("Testing InGest-LLM.as → memOS.as Integration")
         print("=" * 60)
@@ -122,7 +159,14 @@ class CoreIntegrationTestRunner:
 
 
 async def main():
-    """Main entry point."""
+    """
+    Run the core integration test sequence and exit the process with a status code that reflects the outcome.
+    
+    Prints progress and result messages to stdout and terminates the interpreter with:
+    - exit code 0 when all core integration tests pass,
+    - exit code 1 when tests fail or an unexpected error occurs,
+    - exit code 130 when execution is interrupted by the user (KeyboardInterrupt).
+    """
     runner = CoreIntegrationTestRunner()
 
     try:

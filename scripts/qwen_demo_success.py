@@ -12,7 +12,11 @@ from datetime import datetime
 
 
 async def demonstrate_qwen_integration():
-    """Demonstrate the successful Qwen integration."""
+    """
+    Run a step-by-step demonstration of a local Qwen model integration and analysis workflow.
+    
+    Performs live checks against the configured local Qwen endpoint, prints model availability and embedding availability, analyzes a set of hard-coded ApexSigma projects, requests AI-generated relationship and architecture analyses from the model, and prints a summary of integration capabilities, achievements, and next steps.
+    """
 
     print("=" * 80)
     print("QWEN MODEL INTEGRATION - SUCCESSFUL DEMONSTRATION")

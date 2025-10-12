@@ -66,7 +66,19 @@ class QwenProjectAnalyzer:
     """
 
     def __init__(self, qwen_base_url: str = "http://172.22.144.1:12345/v1"):
-        """Initialize the Qwen analyzer."""
+        """
+        Initialize the QwenProjectAnalyzer instance and configure its runtime attributes.
+        
+        Parameters:
+            qwen_base_url (str): Base URL of the local Qwen model HTTP API.
+        
+        Attributes:
+            qwen_base_url (str): Stored base URL for Qwen API requests.
+            logger (logging.Logger): Module logger for diagnostic messages.
+            client (httpx.AsyncClient): Asynchronous HTTP client used to call the Qwen model.
+            base_path (Path): Root filesystem path used to resolve known project directories.
+            projects (dict[str, Path]): Mapping of project names to their local Path locations.
+        """
         self.qwen_base_url = qwen_base_url
         self.logger = get_logger(__name__)
         self.client = httpx.AsyncClient(timeout=60.0)
@@ -82,10 +94,12 @@ class QwenProjectAnalyzer:
 
     async def analyze_all_projects(self) -> EcosystemFlowDiagram:
         """
-        Analyze all ApexSigma projects and generate ecosystem flow diagram.
-
+        Perform a full analysis of all configured projects and produce an ecosystem flow diagram.
+        
+        Collects individual project outlines, derives inter-project relationships, infers data flows, extracts integration patterns, and composes an architecture summary.
+        
         Returns:
-            EcosystemFlowDiagram: Complete ecosystem analysis
+            EcosystemFlowDiagram: Aggregated analysis including `projects`, `relationships`, `data_flows`, `integration_patterns`, and `architecture_summary`.
         """
         self.logger.info("Starting comprehensive project analysis with Qwen model")
 
@@ -120,7 +134,12 @@ class QwenProjectAnalyzer:
     async def _analyze_single_project(
         self, project_name: str, project_path: Path
     ) -> Optional[ProjectOutline]:
-        """Analyze a single project using Qwen model."""
+        """
+        Analyze a single project and produce its ProjectOutline.
+        
+        Returns:
+            ProjectOutline: The analyzed project's outline containing structured metadata and architecture details, or `None` if analysis failed.
+        """
 
         try:
             # Gather project information
@@ -142,7 +161,21 @@ class QwenProjectAnalyzer:
             return None
 
     async def _gather_project_info(self, project_path: Path) -> Dict[str, Any]:
-        """Gather comprehensive information about a project."""
+        """
+        Gather structured information from a project directory for downstream analysis.
+        
+        Parameters:
+            project_path (Path): Path to the project root directory to inspect.
+        
+        Returns:
+            project_info (dict): Dictionary containing:
+                - structure (dict): Directory summary with subdirectories and file counts by extension.
+                - key_files (dict): Mapping of discovered important file names (e.g., README.md, pyproject.toml, Dockerfile) to their trimmed contents (up to ~2000 chars).
+                - dependencies (list): Collected dependency entries (may be empty if none found).
+                - apis (list): List of detected Python API/main files with entries of the form
+                    {"file": "<relative/path>", "content": "<trimmed file contents up to ~1500 chars>"}.
+                - services (list): Discovered service descriptors (may be empty if none found).
+        """
 
         project_info = {
             "structure": {},
@@ -195,7 +228,21 @@ class QwenProjectAnalyzer:
         return project_info
 
     def _analyze_directory_structure(self, project_path: Path) -> Dict[str, Any]:
-        """Analyze the directory structure of a project."""
+        """
+        Collects a project's top-level visible subdirectories and counts files by selected extensions.
+        
+        Parameters:
+            project_path (Path): Path to the project directory to inspect.
+        
+        Returns:
+            dict: A mapping with:
+                - "directories": list of top-level subdirectory names excluding hidden entries and "__pycache__".
+                - "file_counts": dict mapping file extension (e.g., ".py", ".md") to the total number of matching files found recursively.
+        
+        Notes:
+            - Counts are computed recursively for the extensions: .py, .md, .yml, .yaml, .json, .toml.
+            - On error a warning is logged and whatever partial results were gathered are returned.
+        """
 
         structure = {"directories": [], "file_counts": {}}
 
@@ -279,7 +326,14 @@ Provide only the JSON response, no additional text."""
         return prompt
 
     async def _query_qwen_model(self, prompt: str) -> str:
-        """Query the local Qwen model."""
+        """
+        Send a chat-style request to the configured local Qwen model and return the model's assistant content.
+        
+        Uses a predefined system instruction and the provided prompt as the user message. On success returns the assistant's response text; on non-200 HTTP responses or exceptions returns an empty string.
+        
+        Returns:
+            str: The model's response content when available, or an empty string on error.
+        """
 
         try:
             response = await self.client.post(
@@ -315,7 +369,16 @@ Provide only the JSON response, no additional text."""
     def _parse_project_outline(
         self, project_name: str, analysis_result: str
     ) -> Optional[ProjectOutline]:
-        """Parse the Qwen analysis result into a ProjectOutline."""
+        """
+        Parse a Qwen model analysis string and convert it into a ProjectOutline.
+        
+        Parameters:
+            project_name (str): Name to assign to the resulting ProjectOutline.
+            analysis_result (str): Raw text returned by the model; may include fenced code blocks containing JSON.
+        
+        Returns:
+            Optional[ProjectOutline]: A ProjectOutline populated from the parsed JSON fields, or `None` if parsing fails.
+        """
 
         try:
             # Clean the response and extract JSON
@@ -348,7 +411,17 @@ Provide only the JSON response, no additional text."""
     async def _analyze_project_relationships(
         self, project_outlines: List[ProjectOutline]
     ) -> List[ServiceRelationship]:
-        """Analyze relationships between projects using Qwen."""
+        """
+        Determine inter-project service relationships from the provided project outlines.
+        
+        This sends a relationship-analysis prompt to the Qwen model and parses its JSON response into structured ServiceRelationship entries.
+        
+        Parameters:
+            project_outlines (List[ProjectOutline]): Project outlines to include in the relationship analysis.
+        
+        Returns:
+            List[ServiceRelationship]: A list of relationships where each entry describes `source`, `target`, `relationship_type` (e.g., "depends_on", "communicates_with", "stores_in", "orchestrates"), `protocol`, `description`, and `data_flow`.
+        """
 
         # Create relationship analysis prompt
         prompt = self._create_relationship_analysis_prompt(project_outlines)
@@ -362,7 +435,15 @@ Provide only the JSON response, no additional text."""
     def _create_relationship_analysis_prompt(
         self, project_outlines: List[ProjectOutline]
     ) -> str:
-        """Create prompt for analyzing project relationships."""
+        """
+        Builds a natural-language prompt that asks the model to analyze and report inter-project relationships in a strict JSON format.
+        
+        Parameters:
+            project_outlines (List[ProjectOutline]): Project outlines whose name, architecture type, short description, up to three key features, up to three dependencies, and up to two integration points will be included in the prompt.
+        
+        Returns:
+            str: A prompt string that instructs the model to return a JSON object with a "relationships" array. Each relationship entry should include `source`, `target`, `relationship_type` (one of "depends_on", "communicates_with", "stores_in", "orchestrates"), `protocol` (e.g., "HTTP/REST", "Direct", "Database", "Memory"), `description`, and `data_flow` (e.g., "bidirectional", "source_to_target", "target_to_source").
+        """
 
         prompt = """Analyze the relationships between these ApexSigma projects and identify how they interact:
 
@@ -411,7 +492,17 @@ Provide only the JSON response."""
     def _parse_relationships(
         self, relationship_result: str
     ) -> List[ServiceRelationship]:
-        """Parse relationship analysis result."""
+        """
+        Parse a model response containing relationship data into ServiceRelationship objects.
+        
+        Expects `relationship_result` to contain JSON (optionally fenced with ```json ... ```) with a top-level "relationships" array where each entry may include keys: "source", "target", "relationship_type", "protocol", "description", and "data_flow". On parsing errors this method logs the issue and returns an empty list.
+        
+        Parameters:
+            relationship_result (str): Raw text response from the model that contains the relationships JSON.
+        
+        Returns:
+            List[ServiceRelationship]: A list of parsed ServiceRelationship instances; returns an empty list if parsing fails or no relationships are present.
+        """
 
         try:
             # Clean and parse JSON
@@ -447,7 +538,23 @@ Provide only the JSON response."""
         project_outlines: List[ProjectOutline],
         relationships: List[ServiceRelationship],
     ) -> List[Dict[str, Any]]:
-        """Analyze data flows between projects."""
+        """
+        Derive structured data flow entries between projects from service relationships.
+        
+        Parameters:
+            project_outlines (List[ProjectOutline]): Known project summaries (not directly used to create flows but available for context).
+            relationships (List[ServiceRelationship]): Relationships describing interactions between projects.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of data flow dictionaries with keys:
+                - flow_id (str): Unique identifier, formatted as "{source}_to_{target}".
+                - source (str): Originating project/service name.
+                - target (str): Destination project/service name.
+                - data_type (str): Inferred data category (e.g., knowledge_data, api_requests, task_coordination, content_data, general_data).
+                - protocol (str): Communication protocol or mechanism from the relationship.
+                - direction (str): Direction or nature of the data flow as provided by the relationship's data_flow field.
+                - description (str): Human-readable description of the flow.
+        """
 
         data_flows = []
 
@@ -500,7 +607,17 @@ Provide only the JSON response."""
         relationships: List[ServiceRelationship],
         data_flows: List[Dict[str, Any]],
     ) -> str:
-        """Generate overall architecture summary using Qwen."""
+        """
+        Generate a concise 2-3 paragraph architectural summary of the ApexSigma ecosystem from analyzed project data.
+        
+        Parameters:
+            project_outlines (List[ProjectOutline]): High-level project descriptions including name, description, and architecture type.
+            relationships (List[ServiceRelationship]): Inter-service relationships describing source, target, relationship type, and protocol.
+            data_flows (List[Dict[str, Any]]): Derived data flow entries with keys such as `source`, `target`, `data_type`, and `direction`.
+        
+        Returns:
+            str: A developer-facing architecture summary that explains the overall system pattern, how services interact, key integration points and data flows, and the ecosystem's purpose and capabilities.
+        """
 
         prompt = f"""Provide a comprehensive architecture summary for the ApexSigma ecosystem based on this analysis:
 
@@ -534,7 +651,17 @@ Write in clear, technical language suitable for developers and architects."""
     def _extract_integration_patterns(
         self, relationships: List[ServiceRelationship]
     ) -> List[str]:
-        """Extract integration patterns from relationships."""
+        """
+        Identify integration patterns present among a list of service relationships.
+        
+        Inspects each relationship's `protocol` and `relationship_type` to map them to human-readable integration pattern names.
+        
+        Parameters:
+            relationships (List[ServiceRelationship]): Service relationships to analyze.
+        
+        Returns:
+            List[str]: A list of unique integration pattern names found (e.g., "REST API Integration", "Database-Mediated Communication", "Shared Memory Integration", "Service Orchestration", "Data Storage Integration").
+        """
 
         patterns = set()
 
@@ -553,7 +680,15 @@ Write in clear, technical language suitable for developers and architects."""
         return list(patterns)
 
     async def generate_mermaid_diagram(self, flow_diagram: EcosystemFlowDiagram) -> str:
-        """Generate a Mermaid diagram representation of the ecosystem."""
+        """
+        Builds a Mermaid "graph TD" diagram representing the ecosystem's projects and their relationships.
+        
+        Parameters:
+            flow_diagram (EcosystemFlowDiagram): Ecosystem analysis containing project outlines and service relationships used to generate nodes and edges.
+        
+        Returns:
+            mermaid (str): Mermaid-format graph string with project nodes, relationship edges, and styling class definitions.
+        """
 
         mermaid = "graph TD\n"
 
@@ -597,7 +732,12 @@ _qwen_analyzer: Optional[QwenProjectAnalyzer] = None
 
 
 def get_qwen_project_analyzer() -> QwenProjectAnalyzer:
-    """Get the global Qwen project analyzer instance."""
+    """
+    Provide the shared singleton QwenProjectAnalyzer instance for project analysis.
+    
+    Returns:
+        QwenProjectAnalyzer: The global/shared QwenProjectAnalyzer singleton used to analyze projects.
+    """
     global _qwen_analyzer
     if _qwen_analyzer is None:
         _qwen_analyzer = QwenProjectAnalyzer()

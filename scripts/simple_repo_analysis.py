@@ -10,7 +10,22 @@ from datetime import datetime
 
 
 def analyze_python_file(file_path):
-    """Analyze a Python file using AST."""
+    """
+    Produce structural metrics for a Python source file.
+    
+    Parameters:
+        file_path (str): Path to the Python file to analyze.
+    
+    Returns:
+        dict: Analysis results with these keys:
+            - functions (list): Each entry is a dict with keys `name` (str), `line` (int), `args` (int), and `decorators` (int).
+            - classes (list): Each entry is a dict with keys `name` (str), `line` (int), `methods` (int), and `bases` (int).
+            - imports (list): List of imported module names (str); entries may be empty strings for relative/from imports without a module name.
+            - lines (int): Number of lines in the file.
+            - size (int): Number of characters in the file.
+            - complexity_score (int): Simple complexity metric computed as number of functions plus twice the number of classes.
+        On failure, returns a dict containing an `error` (str) key and `lines`, `size`, and `complexity_score` set to 0.
+    """
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -63,7 +78,11 @@ def analyze_python_file(file_path):
 
 
 def analyze_repository():
-    """Analyze the current repository."""
+    """
+    Generate and print a repository-wide analysis report for the current working directory.
+    
+    Scans the repository for common source and configuration files (for example: .py, .md, .json, .yaml, .toml), ignoring typical build, VCS, and virtual environment paths. Analyzes Python files using AST-based inspection to collect functions, classes, imports, lines, and a simple complexity score, aggregates metrics across all discovered files, and prints a structured report including overall metrics, file type distribution, largest files, most complex Python files, Python code analysis, test coverage statistics, project structure, and actionable recommendations.
+    """
 
     print("=" * 70)
     print("INGEST-LLM.AS REPOSITORY ANALYSIS REPORT")

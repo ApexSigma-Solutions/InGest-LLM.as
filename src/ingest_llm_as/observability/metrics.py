@@ -74,13 +74,12 @@ service_info = Gauge(
 
 def setup_metrics(app: FastAPI) -> Instrumentator:
     """
-    Setup Prometheus metrics for the FastAPI application.
-
-    Args:
-        app: FastAPI application instance
-
+    Configure and attach Prometheus metrics instrumentation to a FastAPI application.
+    
+    Sets up an Instrumentator with HTTP metrics, adds request-size and response-size metrics under the "ingest" namespace/subsystem, and exposes the metrics endpoint at /metrics.
+    
     Returns:
-        Instrumentator: Configured instrumentator instance
+        instrumentator (Instrumentator): Configured Instrumentator instance attached to the app.
     """
     # Configure instrumentator with custom settings
     instrumentator = Instrumentator(
@@ -138,7 +137,19 @@ def record_ingestion_complete(
     chunks_processed: int = 0,
     memory_tier: str = "semantic",
 ):
-    """Record the completion of an ingestion operation."""
+    """
+    Record metrics and update gauges when an ingestion operation finishes.
+    
+    Decrements the active ingestion gauge, increments the ingestion request counter with the given status and labels, observes the ingestion duration, and—if provided—increments the chunks-processed counter for the specified memory tier.
+    
+    Parameters:
+        endpoint (str): The ingestion endpoint or route label.
+        content_type (str): The type of content ingested (used as a metric label).
+        duration (float): Time in seconds taken to process the ingestion.
+        status (str): Final status label for the ingestion (e.g., "success", "error").
+        chunks_processed (int): Number of content chunks processed; if zero, chunk metrics are not recorded.
+        memory_tier (str): Label indicating the memory tier for chunk processing (defaults to "semantic").
+    """
     active_ingestions.dec()
     ingestion_requests_total.labels(
         endpoint=endpoint, content_type=content_type, status=status
@@ -154,7 +165,18 @@ def record_ingestion_complete(
 
 
 def record_memos_request(endpoint: str, method: str, status_code: int, duration: float):
-    """Record a request to memOS.as service."""
+    """
+    Record metrics for a memOS.as service request.
+    
+    Increments the memOS request counter with labels for endpoint, method, and status code,
+    and records the request duration.
+    
+    Parameters:
+        endpoint (str): Request path or endpoint name.
+        method (str): HTTP method used for the request (e.g., "GET", "POST").
+        status_code (int): HTTP status code returned by the request.
+        duration (float): Request duration in seconds.
+    """
     memos_requests_total.labels(
         endpoint=endpoint, method=method, status_code=str(status_code)
     ).inc()
@@ -164,5 +186,14 @@ def record_memos_request(endpoint: str, method: str, status_code: int, duration:
 
 
 def init_service_metrics(version: str, environment: str = "development"):
-    """Initialize service-level metrics."""
+    """
+    Set the service-level metric identifying the running version and environment.
+    
+    Parameters:
+        version (str): Service version string to expose as a metric label.
+        environment (str): Deployment environment name (default "development") to expose as a metric label.
+    
+    Description:
+        Sets the `service_info` gauge with labels `version` and `environment` to 1 to indicate the service instance is available.
+    """
     service_info.labels(version=version, environment=environment).set(1)

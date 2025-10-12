@@ -26,12 +26,27 @@ class QwenAnalysisDemo:
     """Demonstration of Qwen-powered project analysis."""
 
     def __init__(self):
-        """Initialize the demo."""
+        """
+        Initialize the QwenAnalysisDemo and prepare analysis resources.
+        
+        Creates the project analyzer used for subsequent analyses and records the instance creation time.
+        
+        Attributes:
+            analyzer: Project analyzer instance returned by get_qwen_project_analyzer().
+            start_time (datetime.datetime): Timestamp when the demo instance was created.
+        """
         self.analyzer = get_qwen_project_analyzer()
         self.start_time = datetime.now()
 
     async def run_full_analysis(self, save_output: bool = False) -> None:
-        """Run comprehensive analysis of all projects."""
+        """
+        Perform a full analysis of all configured projects using the analyzer.
+        
+        Performs a comprehensive project analysis, prints human-readable summaries and diagrams to stdout, and optionally writes the analysis payload and generated Mermaid diagram to disk. Ensures the analyzer is closed when finished.
+        
+        Parameters:
+            save_output (bool): If True, save analysis JSON and Mermaid (.mmd) files to the output directory.
+        """
 
         print("=" * 80)
         print("APEXSIGMA PROJECT ANALYSIS - QWEN MODEL")
@@ -95,7 +110,11 @@ class QwenAnalysisDemo:
             await self.analyzer.close()
 
     async def run_single_project_analysis(self, project_name: str) -> None:
-        """Analyze a single project."""
+        """
+        Perform analysis for a single project and display its outline.
+        
+        Validates that the named project exists and its directory is accessible, runs the analyzer to produce a project outline, and displays the outline if available. Prints informative messages when the project is not found, the path is missing, or the analysis fails, and ensures the analyzer is closed when finished.
+        """
 
         print("=" * 80)
         print(f"SINGLE PROJECT ANALYSIS: {project_name}")
@@ -137,7 +156,11 @@ class QwenAnalysisDemo:
             await self.analyzer.close()
 
     async def run_diagram_only(self) -> None:
-        """Generate only the flow diagram."""
+        """
+        Generate and display the ecosystem flow diagram for all known projects.
+        
+        Generates a combined flow diagram for every configured project, prints a header and the diagram output, prints an error message if generation fails, and ensures the analyzer is closed.
+        """
 
         print("=" * 80)
         print("APEXSIGMA ECOSYSTEM FLOW DIAGRAM")
@@ -154,7 +177,21 @@ class QwenAnalysisDemo:
             await self.analyzer.close()
 
     async def _display_project_outlines(self, projects) -> None:
-        """Display project outlines."""
+        """
+        Display formatted outlines for a sequence of project analysis results.
+        
+        Prints a human-readable outline for each project to standard output, including the project name, architecture type, description, up to five core components, up to five API endpoints (method, path, description), up to five key features, and up to five dependencies.
+        
+        Parameters:
+            projects: An iterable of project-like objects where each object provides the attributes:
+                - project_name (str)
+                - architecture_type (str)
+                - description (str)
+                - core_components (iterable of dicts with keys 'name' and 'description')
+                - api_endpoints (iterable of dicts with keys 'method', 'path', and 'description')
+                - key_features (iterable of str)
+                - dependencies (iterable of str)
+        """
 
         print("PROJECT OUTLINES")
         print("-" * 20)
@@ -189,7 +226,19 @@ class QwenAnalysisDemo:
                 print(f"\nDependencies: {', '.join(project.dependencies[:5])}")
 
     async def _display_relationships(self, relationships) -> None:
-        """Display project relationships."""
+        """
+        Prints a formatted summary of project-to-project relationships.
+        
+        Parameters:
+            relationships: An iterable of relationship-like objects (or dicts) describing edges between projects.
+                Each item is expected to provide the following attributes or keys:
+                - source: source project name
+                - target: target project name
+                - relationship_type: relationship category (e.g., depends_on, communicates_with)
+                - protocol: communication protocol or transport (may be empty)
+                - data_flow: brief description of data exchanged or direction
+                - description: human-readable detail about the relationship
+        """
 
         print("\n\nPROJECT RELATIONSHIPS")
         print("-" * 25)
@@ -207,7 +256,15 @@ class QwenAnalysisDemo:
             print(f"  Description: {rel.description}")
 
     def _get_relationship_arrow(self, rel_type: str) -> str:
-        """Get arrow representation for relationship type."""
+        """
+        Map a relationship type identifier to its corresponding arrow symbol.
+        
+        Parameters:
+            rel_type (str): A relationship type key (e.g., "depends_on", "communicates_with", "stores_in", "orchestrates").
+        
+        Returns:
+            str: The arrow symbol representing the relationship type; defaults to "→" when the type is unknown.
+        """
         arrows = {
             "depends_on": "→",
             "communicates_with": "↔",
@@ -217,7 +274,15 @@ class QwenAnalysisDemo:
         return arrows.get(rel_type, "→")
 
     async def _display_architecture_summary(self, summary: str) -> None:
-        """Display architecture summary."""
+        """
+        Print the architecture summary to standard output.
+        
+        If `summary` is provided, splits it on blank lines and prints each non-empty paragraph with spacing for readability.
+        If `summary` is empty or falsy, prints "No architecture summary generated."
+        
+        Parameters:
+            summary (str): The architecture summary text; paragraphs separated by one or more blank lines will be printed as separate paragraphs.
+        """
 
         print("\n\nARCHITECTURE SUMMARY")
         print("-" * 25)
@@ -232,7 +297,12 @@ class QwenAnalysisDemo:
             print("No architecture summary generated.")
 
     async def _display_mermaid_diagram(self, flow_diagram) -> None:
-        """Display Mermaid diagram."""
+        """
+        Prints a Mermaid diagram representation of the given flow diagram and instructions for visualizing it.
+        
+        Parameters:
+            flow_diagram: An object representing the analyzed projects and relationships; passed to the analyzer to generate Mermaid diagram code.
+        """
 
         print("\n\nMERMAID FLOW DIAGRAM")
         print("-" * 25)
@@ -254,7 +324,27 @@ class QwenAnalysisDemo:
             print(f"Failed to generate Mermaid diagram: {e}")
 
     async def _display_single_project_outline(self, outline) -> None:
-        """Display outline for a single project."""
+        """
+        Prints a formatted, human-readable outline for a single project's analysis.
+        
+        Renders the project's header (name, architecture type, description) followed by sections for
+        Core Components, API Endpoints, Data Models, Services, Key Features, and Dependencies.
+        Each section is printed only if it contains items. For items that are dictionaries, the
+        function prints the item's `name` (or `method`/`Unknown` as a fallback) and an optional
+        description (or `path` when present). Non-dictionary items are printed as-is.
+        
+        Parameters:
+            outline: An object with project analysis fields used for display. Expected attributes:
+                - project_name (str)
+                - architecture_type (str)
+                - description (str)
+                - core_components (list of dict or str)
+                - api_endpoints (list of dict or str)
+                - data_models (list of str)
+                - services (list of dict or str)
+                - key_features (list of str)
+                - dependencies (list of str)
+        """
 
         print(f"PROJECT: {outline.project_name}")
         print("=" * (9 + len(outline.project_name)))
@@ -286,7 +376,18 @@ class QwenAnalysisDemo:
                         print(f"  • {item}")
 
     async def _save_analysis_output(self, flow_diagram) -> None:
-        """Save analysis output to files."""
+        """
+        Save the analysis results and generated Mermaid diagram to timestamped files in the `analysis_output` directory.
+        
+        Parameters:
+            flow_diagram: Object containing analysis results with attributes `projects`, `relationships`, `architecture_summary`, and `integration_patterns`. Each project should expose fields like `project_name`, `description`, `architecture_type`, `core_components`, `api_endpoints`, `data_models`, `services`, `dependencies`, `key_features`, and `integration_points`.
+        
+        Detailed behavior:
+            - Writes a JSON file named `ecosystem_analysis_<timestamp>.json` containing a top-level timestamp, a list of projects, relationships, the architecture summary, and integration patterns.
+            - Generates a Mermaid diagram via the analyzer and writes it to `ecosystem_diagram_<timestamp>.mmd`.
+            - Creates the `analysis_output` directory if it does not exist and prints the paths of the saved files.
+            - Errors encountered while saving are caught and printed; this function does not raise on save failures.
+        """
 
         try:
             output_dir = Path("analysis_output")
@@ -347,7 +448,16 @@ class QwenAnalysisDemo:
 
 
 async def main():
-    """Main entry point."""
+    """
+    Parse command-line arguments, instantiate QwenAnalysisDemo, and run the selected analysis mode.
+    
+    Runs one of:
+    - Full ecosystem analysis (default).
+    - Single project analysis when `--single PROJECT_NAME` is provided.
+    - Diagram-only generation when `--diagram-only` is provided.
+    
+    When `--save-output` is supplied during full analysis, results are saved to files.
+    """
 
     parser = argparse.ArgumentParser(
         description="Qwen-powered ApexSigma project analysis",

@@ -64,7 +64,19 @@ class OmegaIngestGuardian:
     """
 
     def __init__(self, base_path: str = "C:\\Users\\steyn\\ApexSigmaProjects.Dev"):
-        """Initialize the enhanced Omega Ingest Guardian."""
+        """
+        Create a new OmegaIngestGuardian configured for Omega Ingest v8.0.
+        
+        Parameters:
+            base_path (str): Filesystem base path used for local project operations. Defaults to
+                "C:\\Users\\steyn\\ApexSigmaProjects.Dev".
+        
+        Initializes:
+            base_path (Path): Resolved Path object for the provided base_path.
+            logger: Module logger obtained from get_logger.
+            version (str): Service version, set to "8.0".
+            historical_poml: Placeholder for an ingested POML dataset, initialized to None.
+        """
         self.base_path = Path(base_path)
         self.logger = get_logger(__name__)
         self.version = "8.0"
@@ -74,13 +86,19 @@ class OmegaIngestGuardian:
 
     def ingest_poml_dataset(self, poml_data: str) -> dict[str, Any]:
         """
-        Process comprehensive POML historical dataset.
-
-        Args:
-            poml_data: XML-like POML data containing historical knowledge
-
+        Parse a POML XML fragment and extract Project elements into POMLEntity records.
+        
+        Parameters:
+            poml_data (str): XML-like POML content (may be a fragment without a single root) expected to contain a Projects section.
+        
         Returns:
-            Dict containing processed entities and relationships
+            dict: A mapping with:
+                - "entities": list of POMLEntity objects created from Project elements.
+                - "relationships": list of relationship records (empty if none found).
+                - "events": list of event records (empty if none found).
+                - "metadata": dict containing `version`, `processed_at` (UTC ISO timestamp), and counts for entities, relationships, and events.
+        
+        On XML parse failure the function logs the error and returns empty lists for "entities", "relationships", and "events" and an empty "metadata" dict.
         """
         try:
             # Parse the POML XML structure
@@ -148,7 +166,16 @@ class OmegaIngestGuardian:
         poml_dataset: Optional[str] = None,
     ) -> OmegaIngestSnapshot:
         """
-        Execute comprehensive Omega Ingest with POML historical dataset integration.
+        Run a comprehensive Omega Ingest and produce an OmegaIngestSnapshot that incorporates optional historical POML data.
+        
+        Parameters:
+            scope (str): Ingest scope identifier (defaults to "comprehensive").
+            preserve_historical (bool): Whether to retain historical dataset information in the snapshot.
+            generate_poml (bool): Whether to generate POML output as part of the ingest.
+            poml_dataset (Optional[str]): POML dataset content (XML string) to integrate into the snapshot; when provided, entities, relationships, and events from this dataset are included in the resulting snapshot.
+        
+        Returns:
+            OmegaIngestSnapshot: A snapshot of the Master Knowledge Graph containing snapshot metadata (id, timestamp, version), aggregated counts (entities, relationships, decisions), domain and semantic summaries, health metrics, and historical context derived from any integrated POML dataset.
         """
         snapshot_id = str(uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -237,5 +264,10 @@ class OmegaIngestGuardian:
 
 
 def get_omega_ingest_guardian() -> OmegaIngestGuardian:
-    """Get the enhanced Omega Ingest Guardian service instance."""
+    """
+    Obtain a new OmegaIngestGuardian instance.
+    
+    Returns:
+        guardian (OmegaIngestGuardian): A newly constructed OmegaIngestGuardian.
+    """
     return OmegaIngestGuardian()

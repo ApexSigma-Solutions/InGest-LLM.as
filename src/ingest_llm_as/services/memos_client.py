@@ -50,6 +50,11 @@ class MemOSClient:
 
     def __init__(self):
         # Get fresh settings to prevent caching issues
+        """
+        Initialize the MemOSClient using fresh runtime settings and create the underlying HTTPX async client.
+        
+        Builds configuration from the current settings (base URL, timeout, API key), prepares default HTTP headers (including Authorization if an API key is present), logs a brief debug line with base URL and timeout, and constructs an httpx.AsyncClient configured with the resolved base URL, timeout, and headers.
+        """
         current_settings = get_settings()
 
         self.base_url = current_settings.memos_base_url.rstrip("/")
@@ -82,10 +87,10 @@ class MemOSClient:
 
     async def health_check(self) -> bool:
         """
-        Check if memOS.as is healthy and reachable.
-
+        Verify that the memOS.as /health endpoint is reachable.
+        
         Returns:
-            bool: True if memOS.as is healthy, False otherwise.
+            True if the memOS.as /health endpoint responds with HTTP 200, False otherwise.
         """
         try:
             print(f"DEBUG health_check: Making request to {self.base_url}/health")
@@ -106,22 +111,23 @@ class MemOSClient:
         relationships: Optional[List[Dict]] = None,
     ) -> MemoryStorageResponse:
         """
-        Store content in memOS.as memory system.
-
-        Args:
-            content: The content to store
-            memory_tier: Which memory tier to store in
-            metadata: Associated metadata
-            embedding: Optional embedding vector
-            relationships: Optional relationship data
-
+        Store content into the specified memOS.as memory tier.
+        
+        Parameters:
+            content (str): The content to store.
+            memory_tier (MemoryTier): Target memory tier enum value.
+            metadata (Dict): Associated metadata for the memory entry.
+            embedding (Optional[List[float]]): Optional embedding vector for semantic indexing.
+            relationships (Optional[List[Dict]]): Optional list of relationship objects related to the content.
+        
         Returns:
-            MemoryStorageResponse: Storage confirmation with memory ID
-
+            MemoryStorageResponse: Confirmation data returned by memOS.as (e.g., stored memory ID).
+        
         Raises:
-            MemOSConnectionError: If connection fails
-            MemOSAPIError: If API returns an error
-            ValidationError: If response data is invalid
+            MemOSConnectionError: When a network/connection error prevents contacting memOS.as.
+            MemOSAPIError: When memOS.as returns a non-successful API response.
+            ValidationError: When the API response cannot be validated into the response model.
+            MemOSClientError: For unexpected client-side errors.
         """
         try:
             # Map memory tier enum to numeric format expected by memOS.as
@@ -241,10 +247,10 @@ _client_instance: Optional[MemOSClient] = None
 
 async def get_memos_client() -> MemOSClient:
     """
-    Get or create the global memOS.as client instance.
-
+    Get or create the global memOS.as client singleton.
+    
     Returns:
-        MemOSClient: Configured client instance
+        MemOSClient: The configured global MemOSClient instance.
     """
     global _client_instance
     if _client_instance is None:

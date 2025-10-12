@@ -55,21 +55,13 @@ async def ingest_text(
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> IngestionResponse:
     """
-    Ingest text content into the memory system.
-
-    This endpoint processes text content, chunks it if necessary,
-    and stores it in the appropriate memOS.as memory tiers.
-
-    Args:
-        request: Ingestion request with content and metadata
-        background_tasks: FastAPI background tasks for async processing
-        memos_client: memOS.as client dependency
-
+    Ingests text content, generates chunks and embeddings, and stores them in memOS; supports immediate synchronous processing or queued asynchronous processing.
+    
     Returns:
-        IngestionResponse: Processing status and results
-
+        IngestionResponse: Contains `ingestion_id`, overall `status` (PENDING, COMPLETED, or FAILED), `total_chunks`, optional per-chunk `results`, `processing_time_ms` when available, and a human-readable `message`.
+    
     Raises:
-        HTTPException: On validation or processing errors
+        HTTPException: On validation failures, storage/service connectivity issues, or other processing errors.
     """
     print("DEBUG ingest_text: Endpoint called")
     start_time = time.time()
@@ -352,14 +344,16 @@ async def _process_chunks_async(
     processor: ContentProcessor,
 ):
     """
-    Process chunks asynchronously in background with embeddings.
-
-    Args:
-        chunks: Content chunks to process
-        embeddings: Corresponding embeddings for each chunk
-        request: Original ingestion request
-        ingestion_id: Unique ingestion identifier
-        processor: Content processor instance
+    Process a batch of content chunks with their embeddings in a background context using a fresh MemOS client.
+    
+    This runs processing for each chunk (including storage) using the provided content processor and logs completion or failure for the given ingestion operation.
+    
+    Parameters:
+        chunks (List[str]): Ordered list of content chunks to process.
+        embeddings (List[Optional[List[float]]]): Parallel list of optional embeddings corresponding to each chunk.
+        request (IngestionRequest): Original ingestion request carrying metadata and options.
+        ingestion_id (UUID): Unique identifier for the ingestion run, used for logging and tracing.
+        processor (ContentProcessor): Processor instance responsible for extracting metadata and preparing chunks.
     """
     logger.info(f"Starting async processing for ingestion {ingestion_id}")
 
@@ -387,18 +381,15 @@ async def _process_single_chunk(
     embedding: Optional[List[float]] = None,
 ) -> IngestionResult:
     """
-    Process a single content chunk.
-
-    Args:
-        chunk: Content chunk to process
-        chunk_index: Index of this chunk
-        total_chunks: Total number of chunks
-        request: Original ingestion request
-        processor: Content processor instance
-        memos_client: memOS.as client
-
+    Process a single content chunk and store it in memOS, producing a per-chunk IngestionResult.
+    
+    Parameters:
+        embedding (Optional[List[float]]): Optional embedding vector to attach to the stored memory.
+    
     Returns:
-        IngestionResult: Processing result for this chunk
+        IngestionResult: Result for this chunk containing the stored memory's id (or None if not returned),
+        the selected memory tier, the content hash, the chunk size in characters, and a status of
+        `ProcessingStatus.COMPLETED` if storage succeeded or `ProcessingStatus.FAILED` otherwise.
     """
     try:
         print(f"DEBUG: Processing chunk {chunk_index}, starting...")
@@ -466,13 +457,13 @@ async def _process_single_chunk(
 
 def _determine_memory_tier(content_type) -> MemoryTier:
     """
-    Determine appropriate memory tier for content type.
-
-    Args:
-        content_type: Type of content being ingested
-
+    Map a content type identifier to the MemoryTier to use for storage.
+    
+    Parameters:
+        content_type: A content type name or enum (e.g., "text", "python", enum with a .value) used to select the memory tier.
+    
     Returns:
-        MemoryTier: Appropriate memory tier
+        MemoryTier: The selected memory tier. Unrecognized content types default to MemoryTier.SEMANTIC.
     """
     # Simple mapping for now - can be enhanced with ML-based classification
     # Normalize to a lowercase string whether enum or str

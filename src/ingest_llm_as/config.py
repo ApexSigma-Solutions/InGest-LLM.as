@@ -90,7 +90,15 @@ class Settings(BaseSettings):
     @field_validator("postgres_password", mode="before")
     @classmethod
     def get_postgres_password(cls, v):
-        """Fetch PostgreSQL password from Vault if not provided."""
+        """
+        Provide the PostgreSQL password, retrieving it from Vault when the value is missing or set to the placeholder.
+        
+        Parameters:
+            v (Optional[str]): The current value for the PostgreSQL password; may be None or a placeholder.
+        
+        Returns:
+            str: The resolved PostgreSQL password (either the provided value or the secret fetched from Vault).
+        """
         if v is None or v == "your_secure_postgres_password_here":
             return get_secret("services/ingest/database", "postgres_password")
         return v
@@ -98,7 +106,15 @@ class Settings(BaseSettings):
     @field_validator("memos_api_key", mode="before")
     @classmethod
     def get_memos_api_key(cls, v):
-        """Fetch Memos API key from Vault if not provided."""
+        """
+        Return the provided memos API key or fetch it from Vault when not provided.
+        
+        Parameters:
+            v (Optional[str]): Current value for `memos_api_key`; may be None.
+        
+        Returns:
+            str: The memos API key — either the provided value or the value retrieved from Vault at `services/ingest/api` with key `memos_api_key`.
+        """
         if v is None:
             return get_secret("services/ingest/api", "memos_api_key")
         return v
@@ -106,7 +122,15 @@ class Settings(BaseSettings):
     @field_validator("lm_studio_api_key", mode="before")
     @classmethod
     def get_lm_studio_api_key(cls, v):
-        """Fetch LM Studio API key from Vault if not provided."""
+        """
+        Provide the LM Studio API key, fetching it from Vault when not supplied.
+        
+        Parameters:
+            v (Optional[str]): Current value for the `lm_studio_api_key` field; if `None`, the secret is retrieved from Vault at `services/ingest/llm` with key `lm_studio_api_key`.
+        
+        Returns:
+            lm_studio_api_key (str): The LM Studio API key.
+        """
         if v is None:
             return get_secret("services/ingest/llm", "lm_studio_api_key")
         return v
@@ -114,7 +138,15 @@ class Settings(BaseSettings):
     @field_validator("langfuse_public_key", mode="before")
     @classmethod
     def get_langfuse_public_key(cls, v):
-        """Fetch Langfuse public key from Vault if not provided."""
+        """
+        Obtain the Langfuse public key, retrieving it from Vault when not provided.
+        
+        Parameters:
+            v (Optional[str]): Current value for `langfuse_public_key`. If `None`, the value is fetched from Vault at `services/ingest/observability` using the key `langfuse_public_key`.
+        
+        Returns:
+            str | None: The resolved Langfuse public key string, or `None` if no value is available.
+        """
         if v is None:
             return get_secret("services/ingest/observability", "langfuse_public_key")
         return v
@@ -122,7 +154,15 @@ class Settings(BaseSettings):
     @field_validator("langfuse_secret_key", mode="before")
     @classmethod
     def get_langfuse_secret_key(cls, v):
-        """Fetch Langfuse secret key from Vault if not provided."""
+        """
+        Provide the Langfuse secret key, fetching it from Vault when no value is supplied.
+        
+        Parameters:
+        	v (Optional[str]): The current value for the langfuse secret key; if `None`, the key will be retrieved from Vault.
+        
+        Returns:
+        	str: The Langfuse secret key, either the provided value or the value retrieved from Vault.
+        """
         if v is None:
             return get_secret("services/ingest/observability", "langfuse_secret_key")
         return v
@@ -131,10 +171,10 @@ class Settings(BaseSettings):
 # CRITICAL: Dynamic settings loading function to prevent caching issues
 def get_settings() -> Settings:
     """
-    Get fresh settings instance with current environment variables.
-
-    This function prevents the caching issues that occur when settings
-    are loaded at module import time.
+    Create a new Settings instance loaded from the current environment and Vault.
+    
+    Returns:
+        Settings: A fresh, uncached Settings instance populated from environment variables and Vault-backed secrets.
     """
     # Create a new instance which will reload from environment
     return Settings()
