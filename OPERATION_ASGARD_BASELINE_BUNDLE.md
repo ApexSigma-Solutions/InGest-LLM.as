@@ -23,7 +23,7 @@ This baseline bundle captures the complete state of the InGest-LLM.as microservi
 - **Git Repository**: Active with complete history
 
 ### Directory Hierarchy
-```
+```text
 InGest-LLM.as/
 ├── src/ingest_llm_as/                    # Core source code (33 modules)
 │   ├── api/                              # API endpoints (7 modules)
@@ -220,7 +220,7 @@ Key models defined in `src/ingest_llm_as/models.py`:
 - **Tracing**: Jaeger distributed tracing enabled
 - **Logging**: Structured logging with Loki
 - **LLM Observability**: Langfuse integration operational
-- **Grafana Dashboards**: Available at http://localhost:8080
+- **Grafana Dashboards**: Available at <http://localhost:8080>
 
 ---
 
@@ -292,9 +292,9 @@ Key models defined in `src/ingest_llm_as/models.py`:
 ## 8. Integration Points
 
 ### Upstream Dependencies
-- **memOS.as**: Primary memory storage system (http://memos:8090)
-- **tools.as**: Development utilities registry (http://tools:8003)
-- **agent-bridge**: Agent communication layer (http://agent-bridge:8100)
+- **memOS.as**: Primary memory storage system (<http://memos:8090>)
+- **tools.as**: Development utilities registry (<http://tools:8003>)
+- **agent-bridge**: Agent communication layer (<http://agent-bridge:8100>)
 
 ### Database Integrations
 - **PostgreSQL**: Persistent storage via memOS.as
@@ -303,7 +303,7 @@ Key models defined in `src/ingest_llm_as/models.py`:
 - **Neo4j**: Knowledge graph relationships
 
 ### External Services
-- **LM Studio**: Local embedding generation (http://localhost:1234/v1)
+- **LM Studio**: Local embedding generation (<http://localhost:1234/v1>)
 - **OpenAI API**: Fallback LLM services
 - **Langfuse**: LLM observability and monitoring
 - **Prometheus**: Metrics collection

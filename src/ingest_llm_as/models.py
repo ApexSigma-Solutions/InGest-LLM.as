@@ -52,7 +52,7 @@ class IngestionMetadata(BaseModel):
     )
 
     @field_validator("tags")
-    def validate_tags(cls, v: List[str], info: ValidationInfo) -> List[str]:
+    def validate_tags(cls, v: List[str]) -> List[str]:
         """Ensure tags are non-empty strings."""
         return [tag.strip() for tag in v if tag and tag.strip()]
 
@@ -73,7 +73,7 @@ class IngestionRequest(BaseModel):
     process_async: bool = Field(False, description="Whether to process asynchronously")
 
     @field_validator("content")
-    def validate_content(cls, v: str, info: ValidationInfo) -> str:
+    def validate_content(cls, v: str) -> str:
         """Ensure content is not empty after stripping."""
         stripped = v.strip()
         if not stripped:
@@ -274,7 +274,7 @@ class RepositoryIngestionRequest(BaseModel):
         return v
 
     @field_validator("include_patterns")
-    def validate_include_patterns(cls, v: List[str], info: ValidationInfo) -> List[str]:
+    def validate_include_patterns(cls, v: List[str]) -> List[str]:
         """Ensure at least one include pattern."""
         if not v:
             raise ValueError("At least one include pattern is required")

@@ -151,12 +151,11 @@ class InGestE2ETracing:
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error(
+                logger.exception(
                     "Data ingestion failed",
                     data_source=data_source,
                     ingestion_type=ingestion_type,
                     correlation_id=correlation_id,
-                    error=str(e),
                 )
                 raise
 
@@ -237,12 +236,11 @@ class InGestE2ETracing:
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error(
+                logger.exception(
                     "LLM interaction failed",
                     model=model_name,
                     operation=operation,
                     correlation_id=correlation_id,
-                    error=str(e),
                 )
                 raise
 
@@ -259,6 +257,7 @@ class InGestE2ETracing:
         span_name = f"ingest.pipeline.{pipeline_name}.{stage}"
 
         with tracer.start_as_current_span(span_name) as span:
+            tokens = []
             try:
                 # Set standard attributes
                 span.set_attribute("service.name", self.service_name)
@@ -273,16 +272,21 @@ class InGestE2ETracing:
                 # Set ApexSigma correlation attributes
                 if correlation_id:
                     span.set_attribute("apexsigma.correlation_id", correlation_id)
-                    baggage.set_baggage("correlation_id", correlation_id)
+                    updated_context = baggage.set_baggage("correlation_id", correlation_id)
+                    tokens.append(attach(updated_context))
 
                 if workflow_id:
                     span.set_attribute("apexsigma.workflow_id", workflow_id)
-                    baggage.set_baggage("workflow_id", workflow_id)
+                    updated_context = baggage.set_baggage("workflow_id", workflow_id)
+                    tokens.append(attach(updated_context))
 
                 # Set baggage for cross-service propagation
-                baggage.set_baggage("service", self.service_name)
-                baggage.set_baggage("pipeline", pipeline_name)
-                baggage.set_baggage("stage", stage)
+                updated_context = baggage.set_baggage("service", self.service_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("pipeline", pipeline_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("stage", stage)
+                tokens.append(attach(updated_context))
 
                 logger.info(
                     "Processing pipeline stage started",
@@ -306,14 +310,16 @@ class InGestE2ETracing:
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error(
+                logger.exception(
                     "Processing pipeline stage failed",
                     pipeline=pipeline_name,
                     stage=stage,
                     correlation_id=correlation_id,
-                    error=str(e),
                 )
                 raise
+            finally:
+                for token in tokens:
+                    detach(token)
 
     @contextmanager
     def trace_vector_operations(
@@ -329,6 +335,7 @@ class InGestE2ETracing:
         span_name = f"ingest.vector.{operation}"
 
         with tracer.start_as_current_span(span_name) as span:
+            tokens = []
             try:
                 # Set standard attributes
                 span.set_attribute("service.name", self.service_name)
@@ -345,16 +352,21 @@ class InGestE2ETracing:
                 # Set ApexSigma correlation attributes
                 if correlation_id:
                     span.set_attribute("apexsigma.correlation_id", correlation_id)
-                    baggage.set_baggage("correlation_id", correlation_id)
+                    updated_context = baggage.set_baggage("correlation_id", correlation_id)
+                    tokens.append(attach(updated_context))
 
                 if workflow_id:
                     span.set_attribute("apexsigma.workflow_id", workflow_id)
-                    baggage.set_baggage("workflow_id", workflow_id)
+                    updated_context = baggage.set_baggage("workflow_id", workflow_id)
+                    tokens.append(attach(updated_context))
 
                 # Set baggage for cross-service propagation
-                baggage.set_baggage("service", self.service_name)
-                baggage.set_baggage("vector_store", vector_store)
-                baggage.set_baggage("vector_operation", operation)
+                updated_context = baggage.set_baggage("service", self.service_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("vector_store", vector_store)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("vector_operation", operation)
+                tokens.append(attach(updated_context))
 
                 logger.info(
                     "Vector operation started",
@@ -379,14 +391,16 @@ class InGestE2ETracing:
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error(
+                logger.exception(
                     "Vector operation failed",
                     operation=operation,
                     vector_store=vector_store,
                     correlation_id=correlation_id,
-                    error=str(e),
                 )
                 raise
+            finally:
+                for token in tokens:
+                    detach(token)
 
     def prepare_outbound_headers(
         self,
@@ -471,12 +485,11 @@ class InGestE2ETracing:
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error(
+                logger.exception(
                     "Cross-service call failed",
                     target_service=target_service,
                     operation=operation,
                     correlation_id=correlation_id,
-                    error=str(e),
                 )
                 raise
 

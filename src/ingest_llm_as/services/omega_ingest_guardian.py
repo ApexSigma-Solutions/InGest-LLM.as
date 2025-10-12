@@ -83,9 +83,6 @@ class OmegaIngestGuardian:
         self.logger = get_logger(__name__)
         self.version = "8.0"
 
-        # Historical POML dataset for processing
-        self.historical_poml = None
-
     def ingest_poml_dataset(self, poml_data: str) -> dict[str, Any]:
         """
         Process comprehensive POML historical dataset.
@@ -147,8 +144,8 @@ class OmegaIngestGuardian:
                 },
             }
 
-        except ET.ParseError as e:
-            self.logger.error(f"Failed to parse POML data: {str(e)}")
+        except ET.ParseError:
+            self.logger.exception("Failed to parse POML data")
             return {
                 "entities": [],
                 "relationships": [],
@@ -165,6 +162,8 @@ class OmegaIngestGuardian:
     ) -> OmegaIngestSnapshot:
         """
         Execute comprehensive Omega Ingest with POML historical dataset integration.
+
+        Note: scope, preserve_historical, and generate_poml are reserved for future enhancement.
         """
         snapshot_id = str(uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
