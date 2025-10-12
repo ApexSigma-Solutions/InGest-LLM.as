@@ -30,7 +30,7 @@ from ..services.memos_client import get_memos_client, MemOSClient
 from ..services.progress_logger import get_progress_logger
 from ..observability.logging import get_logger
 from ..observability.langfuse_client import get_langfuse_client
-from ..config import settings
+from ..config import get_settings
 
 logger = get_logger(__name__)
 
@@ -60,7 +60,7 @@ class RepositoryProcessor:
         self.logger = get_logger(__name__)
         self.langfuse_client = get_langfuse_client()
         self.content_processor = ContentProcessor(
-            enable_embeddings=settings.embedding_enabled
+            enable_embeddings=get_settings().embedding_enabled
         )
         self.progress_logger = get_progress_logger()
 

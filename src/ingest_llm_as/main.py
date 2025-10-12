@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from .config import settings
+from .config import get_settings
 from .models import HealthResponse
 from .api.ingestion import router as ingestion_router
 from .api.repository import router as repository_router
@@ -16,10 +16,10 @@ from .observability.logging import get_logger
 logger = get_logger(__name__)
 
 app = FastAPI(
-    title=settings.app_name,
+    title=get_settings().app_name,
     description="A microservice for ingesting data into the ApexSigma ecosystem.",
-    version=settings.app_version,
-    debug=settings.debug,
+    version=get_settings().app_version,
+    debug=get_settings().debug,
 )
 
 # Setup observability stack (metrics, tracing, logging)
@@ -40,8 +40,8 @@ def read_root():
     Root endpoint that returns a welcome message.
     """
     return {
-        "message": f"Welcome to the {settings.app_name} service!",
-        "version": settings.app_version,
+        "message": f"Welcome to the {get_settings().app_name} service!",
+        "version": get_settings().app_version,
         "docs": "/docs",
         "health": "/health",
     }
@@ -52,7 +52,6 @@ def health_check():
     """
     Comprehensive health check endpoint with observability status.
     """
-    from fastapi import HTTPException
 
     try:
         # Get observability status
@@ -60,19 +59,18 @@ def health_check():
 
         # Check critical dependencies
         dependencies = {
-            "memOS.as": f"configured: {settings.memos_base_url}",
+            "memOS.as": f"configured: {get_settings().memos_base_url}",
             **obs_status.get("integrations", {}),
         }
 
         # Determine overall health status
         observability = obs_status.get("observability", {})
-        integrations = obs_status.get("integrations", {})
 
         # Check if critical services are available
         critical_issues = []
 
         # Check if memOS is configured
-        if not settings.memos_base_url or settings.memos_base_url == "":
+        if not get_settings().memos_base_url or get_settings().memos_base_url == "":
             critical_issues.append("memOS base URL not configured")
 
         # Check observability components
@@ -88,8 +86,8 @@ def health_check():
 
         response = HealthResponse(
             status=status,
-            service=settings.app_name,
-            version=settings.app_version,
+            service=get_settings().app_name,
+            version=get_settings().app_version,
             dependencies=dependencies,
             **observability,
         )
@@ -106,7 +104,7 @@ def health_check():
         # If health check itself fails, return error status
         return HealthResponse(
             status="error",
-            service=settings.app_name,
-            version=settings.app_version,
+            service=get_settings().app_name,
+            version=get_settings().app_version,
             dependencies={"error": f"Health check failed: {str(e)}"},
         )

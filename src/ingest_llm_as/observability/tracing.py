@@ -17,7 +17,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from fastapi import FastAPI
 
-from ..config import settings
+from ..config import get_settings
 
 
 def setup_tracing(app: FastAPI) -> Optional[trace.Tracer]:
@@ -37,8 +37,8 @@ def setup_tracing(app: FastAPI) -> Optional[trace.Tracer]:
     # Configure resource information
     resource = Resource.create(
         {
-            "service.name": settings.app_name,
-            "service.version": settings.app_version,
+            "service.name": get_settings().app_name,
+            "service.version": get_settings().app_version,
             "service.namespace": "apexsigma",
             "deployment.environment": os.getenv("ENVIRONMENT", "development"),
         }
@@ -97,7 +97,7 @@ def trace_ingestion_operation(operation_name: str):
                 operation_name,
                 attributes={
                     "operation.type": "ingestion",
-                    "service.name": settings.app_name,
+                    "service.name": get_settings().app_name,
                 },
             ) as span:
                 try:
@@ -131,7 +131,7 @@ def trace_memos_request(endpoint: str, method: str):
                 f"memos.{method.lower()}.{endpoint}",
                 attributes={
                     "http.method": method,
-                    "http.url": f"{settings.memos_base_url}{endpoint}",
+                    "http.url": f"{get_settings().memos_base_url}{endpoint}",
                     "service.name": "memOS.as",
                     "operation.type": "http_request",
                 },

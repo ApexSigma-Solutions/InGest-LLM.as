@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 import structlog
 from opentelemetry import trace
 
-from ..config import settings
+from ..config import get_settings
 
 
 def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
@@ -62,8 +62,8 @@ def add_service_context(logger, method_name, event_dict):
     """Add service context to log events."""
     event_dict.update(
         {
-            "service": settings.app_name,
-            "version": settings.app_version,
+            "service": get_settings().app_name,
+            "version": get_settings().app_version,
             "environment": os.getenv("ENVIRONMENT", "development"),
             "namespace": "apexsigma",
         }

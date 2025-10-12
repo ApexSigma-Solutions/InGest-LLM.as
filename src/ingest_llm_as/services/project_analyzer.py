@@ -18,7 +18,7 @@ from ..observability.logging import get_logger
 
 class ProjectAnalyzerSettings(BaseSettings):
     """Settings for ProjectAnalyzer."""
-    projects_base_path: Path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+    projects_base_path: Path = Path.cwd().parent
 
     class Config:
         env_prefix = "PROJECT_"

@@ -13,7 +13,7 @@ import numpy as np
 from openai import OpenAI
 import httpx
 
-from ..config import settings
+from ..config import get_settings
 from ..observability.logging import get_logger
 from ..observability.langfuse_client import get_langfuse_client
 
@@ -56,10 +56,10 @@ class LMStudioVectorizer:
 
     def __init__(self):
         """Initialize the LM Studio vectorizer client."""
-        self.base_url = settings.lm_studio_base_url
-        self.timeout = settings.lm_studio_timeout
+        self.base_url = get_settings().lm_studio_base_url
+        self.timeout = get_settings().lm_studio_timeout
         self.api_key = (
-            settings.lm_studio_api_key or "not-needed"
+            get_settings().lm_studio_api_key or "not-needed"
         )  # LM Studio doesn't require real API key
 
         # Initialize OpenAI client pointed to LM Studio

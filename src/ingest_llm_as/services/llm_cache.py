@@ -8,8 +8,10 @@ to optimize costs and improve performance across the ApexSigma ecosystem.
 import hashlib
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List, Callable, Awaitable
 from dataclasses import dataclass, asdict
+
+import numpy as np
 
 try:
     import redis.asyncio as redis
@@ -112,7 +114,7 @@ class LLMCache:
             return False
 
     def _generate_cache_key(
-        self, prompt: str, model: str, metadata: Dict[str, Any] = None
+        self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Generate a cache key for the prompt."""
 
@@ -134,8 +136,41 @@ class LLMCache:
 
         return f"{self.key_prefix}{prompt_hash}"
 
+    def score_similarity(
+        self, embedding1: List[float], embedding2: List[float]
+    ) -> float:
+        """
+        Calculate cosine similarity between two embeddings.
+
+        Args:
+            embedding1: First embedding vector
+            embedding2: Second embedding vector
+
+        Returns:
+            float: Cosine similarity score (0-1)
+        """
+        try:
+            vec1 = np.array(embedding1)
+            vec2 = np.array(embedding2)
+
+            # Calculate cosine similarity
+            dot_product = np.dot(vec1, vec2)
+            norms = np.linalg.norm(vec1) * np.linalg.norm(vec2)
+
+            if norms == 0:
+                return 0.0
+
+            similarity = dot_product / norms
+
+            # Ensure result is in [0, 1] range
+            return max(0.0, min(1.0, (similarity + 1) / 2))
+
+        except Exception as e:
+            self.logger.error(f"Failed to calculate similarity: {e}")
+            return 0.0
+
     async def get(
-        self, prompt: str, model: str, metadata: Dict[str, Any] = None
+        self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[CacheEntry]:
         """Get cached response for a prompt."""
 
@@ -176,8 +211,8 @@ class LLMCache:
         model: str,
         token_count: int,
         cost_estimate: float = 0.0,
-        metadata: Dict[str, Any] = None,
-        ttl_seconds: int = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        ttl_seconds: Optional[int] = None,
     ) -> bool:
         """Cache a prompt-response pair."""
 
@@ -214,7 +249,7 @@ class LLMCache:
             return False
 
     async def delete(
-        self, prompt: str, model: str, metadata: Dict[str, Any] = None
+        self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """Delete a cached entry."""
 
@@ -384,11 +419,11 @@ async def get_llm_cache() -> LLMCache:
 async def cached_llm_request(
     prompt: str,
     model: str,
-    llm_function,
+    llm_function: Callable[[str], Awaitable[str]],
     token_count_estimate: int = 0,
     cost_estimate: float = 0.0,
-    metadata: Dict[str, Any] = None,
-    ttl_seconds: int = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    ttl_seconds: Optional[int] = None,
 ) -> Tuple[str, bool]:
     """
     Make an LLM request with caching.

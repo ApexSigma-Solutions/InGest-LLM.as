@@ -56,6 +56,16 @@ class ServiceRelationshipResponse(BaseModel):
     data_flow: str
 
 
+class PaginatedServiceRelationshipsResponse(BaseModel):
+    """Paginated response model for service relationships."""
+
+    items: List[ServiceRelationshipResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class EcosystemAnalysisResponse(BaseModel):
     """Response model for complete ecosystem analysis."""
 
@@ -202,12 +212,16 @@ async def analyze_single_project(project_name: str):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
-@router.get("/relationships", response_model=List[ServiceRelationshipResponse])
-async def get_project_relationships():
+@router.get("/relationships", response_model=PaginatedServiceRelationshipsResponse)
+async def get_project_relationships(
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(50, ge=1, le=1000, description="Number of items per page"),
+):
     """
     Get relationships between ApexSigma projects.
 
     Returns detailed mapping of how services interact with each other.
+    Supports pagination for large result sets.
     """
     try:
         logger.info("Analyzing project relationships")
@@ -215,7 +229,7 @@ async def get_project_relationships():
         analyzer = get_qwen_project_analyzer()
         flow_diagram = await analyzer.analyze_all_projects()
 
-        return [
+        all_relationships = [
             ServiceRelationshipResponse(
                 source=r.source,
                 target=r.target,
@@ -226,6 +240,22 @@ async def get_project_relationships():
             )
             for r in flow_diagram.relationships
         ]
+
+        # Apply pagination
+        total = len(all_relationships)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_items = all_relationships[start_idx:end_idx]
+
+        total_pages = (total + page_size - 1) // page_size  # Ceiling division
+
+        return PaginatedServiceRelationshipsResponse(
+            items=paginated_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+        )
 
     except Exception as e:
         logger.error(f"Relationship analysis failed: {e}")

@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
-from ..config import settings
+from ..config import get_settings
 from ..models import (
     IngestionRequest,
     IngestionResponse,
@@ -129,10 +129,10 @@ async def ingest_text(
         processor = ContentProcessor(chunk_size=request.chunk_size)
 
         # Validate content size early
-        if len(request.content) > settings.max_content_size:
+        if len(request.content) > get_settings().max_content_size:
             raise HTTPException(
                 status_code=413,
-                detail=f"Content too large: {len(request.content)} > {settings.max_content_size}",
+                detail=f"Content too large: {len(request.content)} > {get_settings().max_content_size}",
             )
 
         # Check memOS.as connectivity
@@ -177,7 +177,7 @@ async def ingest_text(
         )
 
         # Process synchronously or asynchronously based on request
-        if request.process_async and settings.enable_async_processing:
+        if request.process_async and get_settings().enable_async_processing:
             # Queue for background processing
             background_tasks.add_task(
                 _process_chunks_async,

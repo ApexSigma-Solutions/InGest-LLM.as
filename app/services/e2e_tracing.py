@@ -137,7 +137,7 @@ class InGestE2ETracing:
                 try:
                     yield span
                 finally:
-                    for token in tokens:
+                    for token in reversed(tokens):
                         detach(token)
 
                 span.set_status(Status(StatusCode.OK))
@@ -221,7 +221,7 @@ class InGestE2ETracing:
                 try:
                     yield span
                 finally:
-                    for token in tokens:
+                    for token in reversed(tokens):
                         detach(token)
 
                 span.set_status(Status(StatusCode.OK))
@@ -318,7 +318,7 @@ class InGestE2ETracing:
                 )
                 raise
             finally:
-                for token in tokens:
+                for token in reversed(tokens):
                     detach(token)
 
     @contextmanager
@@ -399,7 +399,7 @@ class InGestE2ETracing:
                 )
                 raise
             finally:
-                for token in tokens:
+                for token in reversed(tokens):
                     detach(token)
 
     def prepare_outbound_headers(
