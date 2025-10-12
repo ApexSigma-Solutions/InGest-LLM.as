@@ -63,7 +63,7 @@ class LangfuseClient:
                 metadata = metadata or {}
                 metadata.update(input_data)
 
-            trace = self.client.start_as_current_span(name=name, metadata=metadata)
+            trace = self.client.create_trace(name=name, metadata=metadata)
             return getattr(trace, "id", None)
         except Exception as e:
             print(f"Failed to create trace: {e}")
