@@ -31,7 +31,16 @@ class ChatThreadSummarizer:
     """Summarizes chat threads and saves progress to memOS.as."""
 
     def __init__(self, memos_base_url: str = "http://devenviro_memos_api:8090"):
-        """Initialize the summarizer."""
+        """
+        Initialize the ChatThreadSummarizer with configuration for memOS interactions.
+        
+        Parameters:
+            memos_base_url (str): Base URL for the memOS.as API; used when saving progress. Defaults to "http://devenviro_memos_api:8090".
+        
+        Attributes:
+            memos_base_url (str): Stored memOS base URL.
+            session_id (str): A unique session identifier generated for this run.
+        """
         self.memos_base_url = memos_base_url
         self.session_id = f"chat_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
@@ -39,15 +48,16 @@ class ChatThreadSummarizer:
         self, chat_file_path: str, output_dir: str = None, save_progress: bool = True
     ) -> Dict[str, Any]:
         """
-        Summarize a chat thread and optionally save progress.
-
-        Args:
-            chat_file_path: Path to chat thread file
-            output_dir: Directory to save summary (optional)
-            save_progress: Whether to save progress to memOS.as
-
+        Summarize a chat thread file, optionally persist the summary to disk and record progress to memOS.as.
+        
+        Parameters:
+            chat_file_path (str): Path to the chat thread file to load and summarize.
+            output_dir (str, optional): Directory where JSON and Markdown summary files will be written if provided.
+            save_progress (bool, optional): Whether to attempt saving progress to memOS.as (skips if memOS services are unavailable).
+        
         Returns:
-            Dictionary containing summary results
+            summary (dict): A structured summary containing keys such as `session_id`, `generated_at`, `source_file`, `source_hash`,
+                `analysis`, `technical_keywords`, `important_sections`, `environment_snapshot`, `summary_text`, and `recommendations`.
         """
 
         print("CHAT THREAD SUMMARIZER")
@@ -77,7 +87,26 @@ class ChatThreadSummarizer:
         return summary
 
     async def _load_chat_thread(self, file_path: str) -> Dict[str, Any]:
-        """Load and parse chat thread from file."""
+        """
+        Load and parse a chat thread file and return a structured representation.
+        
+        Attempts to read the file at `file_path` and parse its contents as JSON. If JSON parsing fails, returns a text-based structure with content, line list, word count, and character count. In all cases, a `metadata` mapping is added containing `file_path`, `file_size`, `loaded_at` (ISO timestamp), and a truncated `content_hash`.
+        
+        Parameters:
+            file_path (str): Path to the chat thread file to load.
+        
+        Returns:
+            chat_data (Dict[str, Any]): Parsed chat data. If the file contained valid JSON, the JSON object is returned with an added `metadata` key. If treated as plain text, the dictionary includes:
+                - `format`: "text"
+                - `content`: full file text
+                - `lines`: list of lines
+                - `word_count`: number of words
+                - `char_count`: number of characters
+                - `metadata`: dict with `file_path`, `file_size`, `loaded_at`, and `content_hash`.
+        
+        Raises:
+            FileNotFoundError: If the file at `file_path` does not exist.
+        """
 
         file_path = Path(file_path)
 
@@ -121,7 +150,27 @@ class ChatThreadSummarizer:
             raise
 
     async def _create_environment_snapshot(self) -> Dict[str, Any]:
-        """Create a snapshot of the current development environment."""
+        """
+        Create a snapshot of the current development environment.
+        
+        The snapshot captures high-level repository, container, and runtime state useful for diagnostics and progress logging. The snapshot includes a timestamp and session identifier, an `environment` mapping with git change lines, recent commits, running container listings, network-attached container names, Python version, and current working directory, and an `apexsigma_status` mapping with derived indicators about container counts, network membership, and a simple integration readiness flag.
+        
+        Returns:
+            snapshot (Dict[str, Any]): A dictionary with the following top-level keys:
+                - timestamp (str): ISO-formatted timestamp when the snapshot was taken.
+                - session_id (str): The current summarizer session identifier.
+                - environment (Dict[str, Any]): Collected environment details, typically including:
+                    - git_changes (List[str]): Lines from `git status --porcelain` or fallback indicators.
+                    - recent_commits (List[str]): Recent git commit summaries or a fallback message.
+                    - running_containers (List[str]): Lines describing running Docker containers or a fallback.
+                    - network_containers (List[str]): Names of containers on the `apexsigma_net` network or a fallback.
+                    - python_version (str): The Python runtime version string.
+                    - working_directory (str): The current working directory path.
+                - apexsigma_status (Dict[str, Any]): Derived status indicators, typically including:
+                    - containers_running (int): Count of containers matching expected patterns.
+                    - network_unified (bool): Whether the expected network appears to include containers.
+                    - integration_ready (bool): Heuristic flag indicating readiness for integration testing.
+        """
 
         print("Creating environment snapshot...")
 
@@ -240,7 +289,28 @@ class ChatThreadSummarizer:
     async def _generate_summary(
         self, chat_data: Dict[str, Any], env_snapshot: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Generate summary of the chat thread."""
+        """
+        Produce a structured summary of a chat thread combined with an environment snapshot.
+        
+        Parameters:
+            chat_data (Dict[str, Any]): Parsed chat data. Expected shapes:
+                - If chat_data["format"] == "text": contains "content" (str), "lines" (List[str]), and "metadata" with "file_path" and "content_hash".
+                - Otherwise: arbitrary JSON-serializable structure; "metadata.file_path" and "metadata.content_hash" are still expected when available.
+            env_snapshot (Dict[str, Any]): Environment snapshot produced by _create_environment_snapshot containing runtime and VCS/container context to include in the summary.
+        
+        Returns:
+            summary (Dict[str, Any]): Dictionary with the generated summary, including:
+                - session_id: summarizer session identifier.
+                - generated_at: ISO timestamp of generation.
+                - source_file: original file path (when available).
+                - source_hash: content hash (when available).
+                - analysis: basic metrics (content type, total lines, words, characters, estimated reading time).
+                - technical_keywords: counts for a fixed set of technical terms (e.g., docker, network, error).
+                - important_sections: up to 10 highlighted line snippets with line numbers matching heuristic indicators (errors, success, critical, emojis).
+                - environment_snapshot: the provided env_snapshot merged into the summary.
+                - summary_text: human-readable summary text derived from analysis, keywords, and important sections.
+                - recommendations: list of actionable recommendations derived from keywords and environment context.
+        """
 
         print("Generating chat summary...")
 
@@ -336,7 +406,17 @@ class ChatThreadSummarizer:
     def _generate_summary_text(
         self, analysis: Dict, keywords: Dict, important_lines: List
     ) -> str:
-        """Generate human-readable summary text."""
+        """
+        Compose a concise human-readable summary of the analyzed chat content, top keywords, and selected important lines.
+        
+        Parameters:
+            analysis (Dict): Analysis metrics including at least `total_words`, `total_lines`, and `estimated_reading_time_minutes`.
+            keywords (Dict): Mapping of topic strings to integer counts; the top three topics by count will be included.
+            important_lines (List): Sequence of items describing notable lines; each item must contain `line_number` and `content`.
+        
+        Returns:
+            summary_text (str): Formatted summary containing word/line counts, estimated reading time, top up to three keywords with counts, and up to five important lines with their line numbers.
+        """
 
         top_keywords = sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:3]
         top_keywords_text = ", ".join([f"{k} ({v})" for k, v in top_keywords if v > 0])
@@ -360,7 +440,16 @@ Important Activities:
     def _generate_recommendations(
         self, keywords: Dict, env_snapshot: Dict
     ) -> List[str]:
-        """Generate recommendations based on content analysis."""
+        """
+        Produce actionable recommendations derived from the analyzed chat keywords and the captured environment snapshot.
+        
+        Parameters:
+            keywords (Dict): Mapping of topic keywords to their observed counts (e.g., 'docker', 'error', 'integration').
+            env_snapshot (Dict): Environment snapshot containing runtime indicators and metadata (e.g., 'apexsigma_status', 'environment' with git and container info).
+        
+        Returns:
+            List[str]: A list of human-readable recommendation strings (e.g., documentation suggestions, testing readiness notices, and commit/checkpoint prompts) based on the content and environment signals.
+        """
 
         recommendations = []
 
@@ -396,7 +485,21 @@ Important Activities:
     async def _save_summary_to_file(
         self, summary: Dict[str, Any], output_dir: str
     ) -> None:
-        """Save summary to file."""
+        """
+        Save the provided summary dictionary to JSON and Markdown files in the specified output directory.
+        
+        Parameters:
+        	summary (Dict[str, Any]): Summary data to persist. Expected keys used in the Markdown output include:
+        		- 'generated_at': human-readable generation timestamp
+        		- 'session_id': session identifier
+        		- 'source_file': original source file path
+        		- 'summary_text': human-readable summary body
+        		- 'recommendations': iterable of recommendation strings
+        	output_dir (str): Path to the directory where files will be written; the directory will be created if it does not exist.
+        
+        Side effects:
+        	Writes two files (JSON and Markdown) named chat_summary_<timestamp>.<ext> under output_dir and prints their paths.
+        """
 
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -427,7 +530,19 @@ Important Activities:
     async def _save_progress_to_memos(
         self, summary: Dict[str, Any], env_snapshot: Dict[str, Any]
     ) -> None:
-        """Save progress to memOS.as."""
+        """
+        Persist a chat summary and accompanying environment snapshot to the memOS.as memory store.
+        
+        Constructs a progress payload containing a brief content message and rich metadata (including session id, timestamp, analysis stats, detected technical keywords, environment snapshot, source file/hash, and recommendations) and sends it to the memOS.as memory store endpoint at `{memos_base_url}/memory/store`. Logs success with the returned memory id on HTTP 200, logs a warning on non-200 responses, and catches exceptions to avoid raising from the caller.
+        
+        Parameters:
+            summary (Dict[str, Any]): The generated summary object. Expected to include keys
+                `session_id`, `generated_at`, `analysis` (with `total_words`), `technical_keywords`,
+                `source_file`, `source_hash`, and `recommendations`.
+            env_snapshot (Dict[str, Any]): Environment snapshot produced by the summarizer. Expected
+                to include an `environment` mapping, where `environment.get('running_containers', [])`
+                yields the list of detected running containers.
+        """
 
         print("Saving progress to memOS.as...")
 
@@ -476,7 +591,11 @@ Important Activities:
 
 
 async def main():
-    """Main entry point."""
+    """
+    Parse CLI arguments and run the chat thread summarization workflow.
+    
+    This function is the command-line entry point: it parses arguments (required `chat_file`, optional `--output` directory, `--no-progress` to skip memOS.as logging, and `--memos-url`), creates a ChatThreadSummarizer, and invokes its summarization process with the selected options. On success it prints a short summary of results (words processed, important sections, recommendations, and session ID). On failure it prints the exception traceback and exits the process with status code 1.
+    """
 
     parser = argparse.ArgumentParser(
         description="Summarize chat threads with automatic progress logging",

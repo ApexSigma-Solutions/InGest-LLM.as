@@ -67,7 +67,14 @@ class EcosystemIngestionService:
     """
 
     def __init__(self, base_path: str = "C:\\Users\\steyn\\ApexSigmaProjects.Dev"):
-        """Initialize the ecosystem ingestion service."""
+        """
+        Initialize the EcosystemIngestionService with a root projects path and required clients.
+        
+        Sets the service's base path and prepares internal clients and the default ProjectInfo entries for the ApexSigma ecosystem (InGest-LLM.as, memos.as, devenviro.as, tools.as). These ProjectInfo entries describe each project's path, description, status, primary language, key features, and dependencies.
+        
+        Parameters:
+            base_path (str): Filesystem path to the root directory containing the project repositories. Defaults to "C:\\Users\\steyn\\ApexSigmaProjects.Dev".
+        """
         self.base_path = Path(base_path)
         self.logger = get_logger(__name__)
         self.langfuse_client = get_langfuse_client()
@@ -146,14 +153,14 @@ class EcosystemIngestionService:
         self, include_historical: bool = True, generate_cross_analysis: bool = True
     ) -> EcosystemSnapshot:
         """
-        Ingest the entire ApexSigma ecosystem.
-
-        Args:
-            include_historical: Whether to store historical snapshots
-            generate_cross_analysis: Whether to perform cross-project analysis
-
+        Orchestrates ingestion, analysis, and optional historical storage for the entire ApexSigma ecosystem.
+        
+        Parameters:
+            include_historical (bool): If True, persist the generated ecosystem snapshot to historical storage.
+            generate_cross_analysis (bool): If True, compute cross-project analysis across ingested projects.
+        
         Returns:
-            EcosystemSnapshot: Complete ecosystem analysis
+            EcosystemSnapshot: Snapshot containing snapshot_id, timestamp, aggregated project metrics (files, size, lines), per-project results, cross-project analysis (when requested), ecosystem health metrics, and recommendations.
         """
         snapshot_id = str(uuid4())
         start_time = time.time()
@@ -282,15 +289,20 @@ class EcosystemIngestionService:
         parent_trace_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Ingest a single project in the ecosystem.
-
-        Args:
-            project_info: Project information
-            snapshot_id: Ecosystem snapshot ID
-            parent_trace_id: Parent Langfuse trace ID
-
+        Ingest a single project from the local filesystem and produce aggregated ingestion metrics.
+        
+        Parameters:
+            project_info (ProjectInfo): Metadata describing the project to ingest.
+            snapshot_id (str): Identifier for the current ecosystem snapshot; added to ingestion metadata.
+            parent_trace_id (Optional[str]): Optional parent trace identifier used for external tracing systems.
+        
         Returns:
-            Optional[Dict[str, Any]]: Project ingestion results
+            Optional[Dict[str, Any]]: A dictionary of ingestion metadata and aggregated metrics if ingestion completed; `None` if the project path is missing or ingestion failed.
+        
+        The returned dictionary contains keys such as `project_name`, `project_info`, `ingestion_id`, `repository_path`,
+        `files_discovered`, `files_processed`, timing fields (`discovery_time_ms`, `processing_time_ms`, `total_time_ms`),
+        `processing_summary`, `timestamp`, `success_rate`, `total_size_bytes`, `total_elements_extracted`,
+        `total_lines_of_code`, `average_complexity`, and `file_types`.
         """
         project_path = self.base_path / project_info.path
 
@@ -421,7 +433,22 @@ class EcosystemIngestionService:
     async def _generate_cross_project_analysis(
         self, project_results: List[Dict[str, Any]], snapshot_id: str
     ) -> Dict[str, Any]:
-        """Generate cross-project analysis and relationships."""
+        """
+        Produce a cross-project analysis summarizing dependencies, shared technologies, size and complexity comparisons, architecture patterns, and integration points.
+        
+        Parameters:
+            project_results (List[Dict[str, Any]]): List of per-project result dictionaries produced by ingestion; each entry is expected to include at least the keys "project_name", "project_info" (which may contain "dependencies"), "files_processed", "total_size_bytes", "total_lines_of_code", "average_complexity", and "total_elements_extracted".
+            snapshot_id (str): Identifier for the ecosystem snapshot used for traceability (not modified by this function).
+        
+        Returns:
+            Dict[str, Any]: Analysis dictionary with the following keys:
+                - "dependency_matrix" (Dict[str, List[str]]): Mapping from project name to its dependency list.
+                - "shared_technologies" (List[str]): Aggregated list of technologies/dependencies found across all projects.
+                - "size_comparison" (Dict[str, Dict[str, float|int]]): Per-project size metrics with keys "files", "size_mb", and "lines_of_code".
+                - "complexity_comparison" (Dict[str, Dict[str, float|int]]): Per-project complexity metrics with keys "average_complexity" and "elements_extracted".
+                - "architecture_patterns" (List[str]): Identified or suggested common architecture patterns across the ecosystem.
+                - "integration_points" (List[str]): Notable integration relationships between projects.
+        """
         analysis = {
             "dependency_matrix": {},
             "shared_technologies": [],
@@ -484,7 +511,21 @@ class EcosystemIngestionService:
     def _calculate_ecosystem_health(
         self, project_results: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Calculate overall ecosystem health metrics."""
+        """
+        Compute an overall health assessment for the ecosystem and per-project health categories.
+        
+        Parameters:
+            project_results (List[Dict[str, Any]]): List of per-project result dictionaries produced during ingestion. Each dictionary is expected to include at least `project_name`, `success_rate` (0.0–1.0), and `average_complexity` (numeric).
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing:
+                - `overall_score` (float): Ratio of projects with success_rate > 0.8 to total projects.
+                - `status` (str): One of `"healthy"`, `"needs_attention"`, or `"unhealthy"` determined from `overall_score`.
+                - `successful_projects` (int): Count of projects with success_rate > 0.8.
+                - `total_projects` (int): Total number of projects assessed.
+                - `project_health` (Dict[str, str]): Mapping of project_name to health category (`"excellent"`, `"good"`, `"fair"`, or `"needs_attention"`) based on success_rate and average_complexity.
+                - `assessment_timestamp` (str): UTC ISO timestamp of when the assessment was produced.
+        """
         if not project_results:
             return {"status": "unhealthy", "score": 0.0}
 
@@ -531,7 +572,19 @@ class EcosystemIngestionService:
         cross_analysis: Dict[str, Any],
         health: Dict[str, Any],
     ) -> List[str]:
-        """Generate ecosystem-level recommendations."""
+        """
+        Produce recommendations to improve ecosystem health, maintainability, and cross-project integration.
+        
+        Evaluates ingestion success rates, project complexity, codebase size, and documentation-to-code ratio (among other cross-project signals) to generate actionable recommendations for the ecosystem.
+        
+        Parameters:
+            project_results (List[Dict[str, Any]]): Per-project ingestion summaries and metrics produced during the snapshot.
+            cross_analysis (Dict[str, Any]): Aggregated cross-project analysis such as shared technologies and integration points.
+            health (Dict[str, Any]): Calculated ecosystem health metrics including `overall_score` and per-project health.
+        
+        Returns:
+            List[str]: A list of plain-language recommendation strings addressing improvements (e.g., ingestion reliability, refactoring high-complexity projects, modularization, documentation coverage, and ecosystem monitoring).
+        """
         recommendations = []
 
         # Health-based recommendations
@@ -586,7 +639,11 @@ class EcosystemIngestionService:
         return recommendations
 
     async def _store_ecosystem_snapshot(self, snapshot: EcosystemSnapshot) -> None:
-        """Store ecosystem snapshot in memOS for historical reference."""
+        """
+        Persist a human-readable summary and a detailed JSON representation of the ecosystem snapshot into memOS.
+        
+        Stores two memory entries at MemoryTier.SEMANTIC: a readable report with aggregate metrics and per-project summaries, and a second entry containing the full snapshot serialized as JSON. Adds metadata (including snapshot_id, projects_count, total_files, and entry_type) to each entry. Logs an info message on successful storage and a warning if storage fails.
+        """
         try:
             # Create comprehensive ecosystem report
             content = f"ApexSigma Ecosystem Snapshot\n{'='*50}\n\n"
@@ -663,13 +720,29 @@ class EcosystemIngestionService:
             self.logger.warning(f"Failed to store ecosystem snapshot in memOS: {e}")
 
     def _estimate_total_lines(self, successful_files: List[Any]) -> int:
-        """Estimate total lines of code from file results."""
+        """
+        Estimate the total lines of code represented by a list of processed file results.
+        
+        Parameters:
+            successful_files (List[Any]): Processed file result objects; each object must have a `file_size` attribute (bytes).
+        
+        Returns:
+            int: Sum of estimated lines where each file contributes `max(1, file_size // 50)` lines (approx. 50 characters per line).
+        """
         return sum(
             max(1, f.file_size // 50) for f in successful_files
         )  # ~50 chars per line
 
     def _calculate_average_complexity(self, successful_files: List[Any]) -> float:
-        """Calculate average complexity across files."""
+        """
+        Compute the average positive complexity score from a list of processed file records.
+        
+        Parameters:
+            successful_files (List[Any]): File-like objects that expose a numeric `complexity_score` attribute; only values greater than zero are considered.
+        
+        Returns:
+            average_complexity (float): Mean of the positive `complexity_score` values, or 0.0 if no positive scores are present.
+        """
         complexities = [
             f.complexity_score
             for f in successful_files
@@ -678,7 +751,15 @@ class EcosystemIngestionService:
         return sum(complexities) / len(complexities) if complexities else 0.0
 
     def _analyze_file_types(self, successful_files: List[Any]) -> Dict[str, int]:
-        """Analyze file type distribution."""
+        """
+        Return a mapping of file extensions to their occurrence counts among processed files.
+        
+        Parameters:
+            successful_files (List[Any]): Iterable of file result objects; each must have a `relative_path` attribute or key representing the file path relative to the repository root.
+        
+        Returns:
+            Dict[str, int]: Dictionary where keys are file extensions (including the leading dot, e.g. `.py`) or `"no_extension"` for files without a suffix, and values are the number of occurrences for each extension.
+        """
         file_types = {}
         for file_result in successful_files:
             ext = Path(file_result.relative_path).suffix or "no_extension"
@@ -692,10 +773,10 @@ _ecosystem_service: Optional[EcosystemIngestionService] = None
 
 def get_ecosystem_ingestion_service() -> EcosystemIngestionService:
     """
-    Get the global ecosystem ingestion service instance.
-
+    Get the shared singleton EcosystemIngestionService used by the application.
+    
     Returns:
-        EcosystemIngestionService: Configured service instance
+        EcosystemIngestionService: The configured, globally shared service instance.
     """
     global _ecosystem_service
     if _ecosystem_service is None:

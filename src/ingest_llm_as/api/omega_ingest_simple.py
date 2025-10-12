@@ -43,7 +43,12 @@ class OmegaIngestResponse(BaseModel):
 
 @router.get("/status")
 async def get_omega_ingest_status():
-    """Get current status of the Master Knowledge Graph."""
+    """
+    Retrieve the current operational status and metadata for the Master Knowledge Store Guardian.
+    
+    Returns:
+        dict: A mapping containing keys such as `guardian_role`, `mandate`, `knowledge_sources`, `storage_tiers`, `capabilities`, `status`, `version`, and `ecosystem_health` describing the guardian's current state.
+    """
     status_info = {
         "guardian_role": "Master Knowledge Store Guardian v8.0",
         "mandate": "Preservation, protection, and synthesis of organizational knowledge",
@@ -76,10 +81,18 @@ async def get_omega_ingest_status():
 @router.post("/ingest", response_model=OmegaIngestResponse)
 async def execute_omega_ingest(request: OmegaIngestRequest):
     """
-    🛡️ Execute Omega Ingest - Guardian of the Master Knowledge Store
-
-    Implements the immutable mandate to preserve, protect, and synthesize
-    all accumulated organizational knowledge into the Master Knowledge Graph.
+    Execute Omega Ingest to update the Master Knowledge Graph using the provided request.
+    
+    If `request.poml_dataset` is provided, counts simple POML tags to determine total entities and relationships and includes those metrics in the response.
+    
+    Parameters:
+        request (OmegaIngestRequest): Ingest configuration and optional POML dataset used to update the knowledge graph.
+    
+    Returns:
+        OmegaIngestResponse: Contains `snapshot_id`, `status`, `message`, `total_entities`, `total_relationships`, `total_decisions`, `knowledge_domains`, `health_metrics`, and `execution_time_seconds`.
+    
+    Raises:
+        HTTPException: If the ingest execution fails.
     """
     try:
         logger.info("🛡️ OMEGA INGEST GUARDIAN v8.0: Activation requested")
@@ -142,7 +155,16 @@ async def execute_omega_ingest(request: OmegaIngestRequest):
 
 @router.get("/knowledge-domains")
 async def get_knowledge_domains():
-    """Get available knowledge domains in the Master Knowledge Graph."""
+    """
+    Return available knowledge domains and POML support details for the Master Knowledge Graph.
+    
+    Returns:
+        domains (dict): Mapping with keys:
+            - core_domains: descriptions of core service domains
+            - meta_domains: descriptions of meta/organizational domains
+            - relationship_types: list of supported relationship labels
+            - poml_support: POML version, supported entity types, and integration flags
+    """
     domains = {
         "core_domains": {
             "data_ingestion": "InGest-LLM.as microservice domain",

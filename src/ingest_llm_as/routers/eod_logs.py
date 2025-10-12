@@ -68,10 +68,23 @@ class EODLogService:
     """Service for processing EOD logs"""
 
     def __init__(self):
+        """
+        Initialize the EODLogService and set up its necessary dependencies.
+        
+        Creates and assigns a KnowledgeGraphService instance to `self.kg_service` for interacting with the knowledge graph.
+        """
         self.kg_service = KnowledgeGraphService()
 
     async def process_eod_log(self, log_entry: EODLogEntry) -> EODLogResponse:
-        """Process and ingest an EOD log entry"""
+        """
+        Ingest an EOD log entry, persist it to the knowledge graph and semantic store, and update project metrics.
+        
+        Returns:
+            EODLogResponse: Response containing the ingestion status, the original `log_id`, the created `knowledge_graph_id` when available, and a human-readable message.
+        
+        Raises:
+            HTTPException: If processing fails (returns status code 500).
+        """
         try:
             logger.info(f"Processing EOD log: {log_entry.log_id}")
 
@@ -103,7 +116,16 @@ class EODLogService:
             )
 
     def _transform_to_knowledge_graph(self, log_entry: EODLogEntry) -> Dict[str, Any]:
-        """Transform EOD log into knowledge graph format"""
+        """
+        Convert an EODLogEntry into a knowledge-graph-compatible dictionary.
+        
+        Returns:
+            dict: A dictionary representing the log in the knowledge graph schema, including keys:
+                - `type`, `id`, `timestamp`, `project`, `branch`, `commit`
+                - `tasks_completed`, `key_insights`, `blockers`, `next_steps`
+                - `session_stats`: dict with `duration`, `files_modified`, `commits`
+                - `relationships`: list of relationship objects
+        """
         return {
             "type": "eod_session",
             "id": log_entry.log_id,
@@ -124,7 +146,15 @@ class EODLogService:
         }
 
     def _extract_relationships(self, log_entry: EODLogEntry) -> List[Dict[str, str]]:
-        """Extract entity relationships from EOD log"""
+        """
+        Builds a list of relationship records linking the log, its project, completed tasks, and branch.
+        
+        Returns:
+            List[Dict[str, str]]: A list of dictionaries each containing keys `from`, `to`, and `type` that describe relationships such as:
+                - project -> log (`HAS_SESSION`)
+                - log -> task (`COMPLETED_TASK`)
+                - log -> branch (`ON_BRANCH`)
+        """
         relationships = []
 
         # Project -> Session relationship
@@ -150,13 +180,26 @@ class EODLogService:
         return relationships
 
     async def _store_in_knowledge_graph(self, kg_data: Dict[str, Any]) -> str:
-        """Store data in knowledge graph database"""
+        """
+        Constructs and returns a knowledge-graph identifier for the provided data.
+        
+        Parameters:
+            kg_data (Dict[str, Any]): Dictionary representing the knowledge-graph payload; must contain the key `'id'` which is used to form the returned identifier.
+        
+        Returns:
+            str: Knowledge-graph identifier derived from `kg_data['id']` (e.g. `"kg_<id>"`).
+        """
         # This would integrate with your actual knowledge graph storage
         # For now, return a mock ID
         return f"kg_{kg_data['id']}"
 
     async def _store_for_semantic_search(self, log_entry: EODLogEntry):
-        """Store EOD log content for semantic search"""
+        """
+        Prepare and store a textual representation of an EOD log for semantic search and embedding.
+        
+        Parameters:
+            log_entry (EODLogEntry): The end-of-day log to be converted into a combined text block and indexed in the semantic/embedding store.
+        """
         # Combine all text content for embedding
         text_content = f"""
         Project: {log_entry.project}
@@ -173,7 +216,12 @@ class EODLogService:
         logger.debug(f"EOD log content for embedding: {text_content}")
 
     async def _update_project_metrics(self, log_entry: EODLogEntry):
-        """Update project-level metrics based on EOD log"""
+        """
+        Update aggregated project metrics using data from a single EOD log entry.
+        
+        Parameters:
+            log_entry (EODLogEntry): The end-of-day log containing session, progress, and metadata used to update project-level metrics such as velocity, task completion, and recent blockers.
+        """
         # Update project velocity, completion rates, etc.
         logger.info(f"Updating project metrics for: {log_entry.project}")
 
@@ -185,20 +233,32 @@ eod_service = EODLogService()
 @router.post("/eod-log", response_model=EODLogResponse)
 async def ingest_eod_log(log_entry: EODLogEntry) -> EODLogResponse:
     """
-    Ingest an End of Day (EOD) log entry into the knowledge graph.
-
-    This endpoint receives structured development session data and:
-    1. Transforms it into knowledge graph format
-    2. Stores entities and relationships
-    3. Creates embeddings for semantic search
-    4. Updates project metrics
+    Ingest an End of Day (EOD) log entry into the knowledge graph and trigger downstream storage, embedding, and metrics updates.
+    
+    Parameters:
+        log_entry (EODLogEntry): Structured EOD log containing project, session, progress, and optional metadata.
+    
+    Returns:
+        EODLogResponse: Result of the ingestion containing the operation status, the original log_id, an optional knowledge_graph_id, and a human-readable message.
     """
     return await eod_service.process_eod_log(log_entry)
 
 
 @router.get("/eod-logs/{project}")
 async def get_eod_logs_for_project(project: str, limit: int = 10):
-    """Retrieve recent EOD logs for a specific project"""
+    """
+    Fetches recent end-of-day log entries for a project.
+    
+    Parameters:
+        project (str): Project identifier to retrieve logs for.
+        limit (int): Maximum number of recent log entries to return.
+    
+    Returns:
+        dict: Response containing:
+            - project (str): The requested project identifier.
+            - logs (List[dict]): List of EOD log entries (empty if none).
+            - message (str): Human-readable summary of the result.
+    """
     # Implementation would query knowledge graph for project's EOD logs
     return {
         "project": project,
@@ -209,7 +269,19 @@ async def get_eod_logs_for_project(project: str, limit: int = 10):
 
 @router.get("/eod-logs/{project}/metrics")
 async def get_project_metrics(project: str):
-    """Get development metrics derived from EOD logs"""
+    """
+    Return development metrics aggregated from End-of-Day logs for the given project.
+    
+    Returns:
+        dict: A mapping with keys:
+            - "project" (str): Project identifier provided as input.
+            - "metrics" (dict): Aggregated metrics containing:
+                - "total_sessions" (int): Total number of recorded sessions.
+                - "average_session_duration" (int): Average session duration in minutes.
+                - "tasks_completed_total" (int): Sum of tasks completed across sessions.
+                - "most_common_blockers" (List[str]): Ranked list of frequent blockers.
+                - "development_velocity" (int): Computed velocity metric for the project.
+    """
     # Implementation would calculate metrics from stored EOD data
     return {
         "project": project,

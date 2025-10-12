@@ -22,13 +22,12 @@ from ..config import get_settings
 
 def setup_tracing(app: FastAPI) -> Optional[trace.Tracer]:
     """
-    Setup OpenTelemetry distributed tracing for the application.
-
-    Args:
-        app: FastAPI application instance
-
+    Initialize OpenTelemetry tracing and instrument the FastAPI app with a Jaeger exporter.
+    
+    If the ENABLE_TRACING environment variable is not set to "true" (case-insensitive), tracing is disabled and the function returns None.
+    
     Returns:
-        Optional[trace.Tracer]: Configured tracer instance
+        Configured tracer instance, or `None` if tracing is disabled.
     """
     # Check if tracing is enabled
     if not os.getenv("ENABLE_TRACING", "true").lower() == "true":
@@ -84,13 +83,24 @@ def get_tracer() -> trace.Tracer:
 
 def trace_ingestion_operation(operation_name: str):
     """
-    Decorator to trace ingestion operations.
-
-    Args:
-        operation_name: Name of the operation being traced
+    Wraps a function to create an OpenTelemetry span for an ingestion operation named `operation_name`.
+    
+    Parameters:
+        operation_name (str): Span name to use for the ingestion operation.
+    
+    Returns:
+        decorator: A decorator that, when applied to a callable, starts a span with attributes `operation.type = "ingestion"` and `service.name = settings.app_name`; on success sets `operation.status = "success"`, on exception sets `operation.status = "error"`, records the error message and exception, and re-raises.
     """
 
     def decorator(func):
+        """
+        Create a decorator that wraps a function execution in an "ingestion" tracer span named by `operation_name`.
+        
+        The wrapped function is executed inside a span whose attributes include `operation.type` = "ingestion" and `service.name` = settings.app_name. On successful completion the span is annotated with `operation.status` = "success". If the wrapped function raises an exception the span is annotated with `operation.status` = "error", `error.message` containing the exception message, the exception is recorded on the span, and the exception is re-raised.
+        
+        Returns:
+            callable: A wrapper function that executes the original function within the described span.
+        """
         def wrapper(*args, **kwargs):
             tracer = get_tracer()
             with tracer.start_as_current_span(
@@ -117,14 +127,34 @@ def trace_ingestion_operation(operation_name: str):
 
 def trace_memos_request(endpoint: str, method: str):
     """
-    Decorator to trace requests to memOS.as.
-
-    Args:
-        endpoint: memOS.as endpoint being called
-        method: HTTP method
+    Create a decorator that starts a tracing span for an HTTP request to memOS.as.
+    
+    Parameters:
+        endpoint (str): The memOS.as endpoint path appended to settings.memos_base_url.
+        method (str): The HTTP method name used for the traced request (e.g., "GET", "POST").
+    
+    Returns:
+        function: A decorator that wraps a callable and creates a span named "memos.{method}.{endpoint}".
+            The span is annotated with request attributes (http.method, http.url, service.name, operation.type).
+            On success the span receives `operation.status = "success"` and, if present on the result, `http.status_code`.
+            On exception the span receives `operation.status = "error"`, `error.message`, and records the exception before the exception is re-raised.
     """
 
     def decorator(func):
+        """
+        Wraps a function to trace an HTTP request to memOS.as by creating a span named "memos.{method}.{endpoint}".
+        
+        The wrapper starts a span with attributes for HTTP method, URL (constructed from settings.memos_base_url and the endpoint), service name "memOS.as", and operation type "http_request". After calling the wrapped function, if the result has a `status_code` attribute that value is recorded on the span and the operation status is set to "success". If the wrapped function raises an exception, the span is annotated with `operation.status = "error"`, the exception message is recorded under `error.message`, the exception is attached to the span, and the exception is re-raised.
+        
+        Parameters:
+            func (Callable): The function to wrap. The wrapper will call `func(*args, **kwargs)`.
+        
+        Returns:
+            Callable: A wrapper function that executes `func` inside the tracing span.
+        
+        Raises:
+            Exception: Re-raises any exception thrown by the wrapped function after recording it on the span.
+        """
         def wrapper(*args, **kwargs):
             tracer = get_tracer()
             with tracer.start_as_current_span(
@@ -162,7 +192,16 @@ def add_span_attributes(**attributes):
 
 
 def add_span_event(name: str, attributes: dict = None):
-    """Add an event to the current span."""
+    """
+    Add an event to the currently active span.
+    
+    Parameters:
+        name (str): The event name to add to the current span.
+        attributes (dict, optional): Key-value attributes to attach to the event. Defaults to an empty dict if not provided.
+    
+    Notes:
+        If there is no active span, this function has no effect.
+    """
     current_span = trace.get_current_span()
     if current_span:
         current_span.add_event(name, attributes or {})

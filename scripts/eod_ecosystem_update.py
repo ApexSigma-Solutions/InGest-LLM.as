@@ -35,6 +35,13 @@ class EODEcosystemUpdater:
     """End of Day ecosystem update orchestrator."""
 
     def __init__(self):
+        """
+        Initialize the updater by acquiring required services and recording the start time.
+        
+        Initializes the ecosystem ingestion service and the memOS client used throughout the EOD workflow, and sets the updater's start_time to the current datetime.
+        """
+        self.ecosystem_service = get_ecosystem_ingestion_service()
+        self.memos_client = get_memos_client()
         """Initialize the EOD updater."""
         try:
             self.ecosystem_service = get_ecosystem_ingestion_service()
@@ -82,7 +89,13 @@ class EODEcosystemUpdater:
     async def _full_ecosystem_update(
         self, force_refresh: bool, include_historical: bool
     ) -> None:
-        """Perform full ecosystem ingestion and analysis."""
+        """
+        Orchestrates a full ecosystem ingestion, runs cross-project analysis, and stores the daily summary.
+        
+        Parameters:
+        	force_refresh (bool): If True, skip checks for recent snapshots and force a fresh ingestion.
+        	include_historical (bool): If True, include historical data during ingestion.
+        """
 
         print("🚀 STARTING FULL ECOSYSTEM INGESTION")
         print("-" * 40)
@@ -111,7 +124,23 @@ class EODEcosystemUpdater:
         await self._store_daily_summary(snapshot)
 
     async def _display_ingestion_results(self, snapshot) -> None:
-        """Display ingestion results summary."""
+        """
+        Print a human-readable summary of an ingestion snapshot and a per-project breakdown to standard output.
+        
+        Parameters:
+            snapshot: An ingestion snapshot object containing reporting fields used by this routine:
+                - snapshot_id: identifier for the snapshot
+                - total_projects (int)
+                - total_files (int)
+                - total_size_bytes (int)
+                - total_lines_of_code (int)
+                - projects: iterable of project dictionaries, each expected to include:
+                    - 'project_name' (str)
+                    - 'project_info' (dict) with key 'status' (str)
+                    - 'files_processed' (int)
+                    - optional 'total_size_bytes' (int)
+                    - optional 'success_rate' (float, 0.0–1.0)
+        """
         print("\n✅ INGESTION RESULTS")
         print("-" * 25)
         print(f"Snapshot ID: {snapshot.snapshot_id}")
@@ -134,7 +163,17 @@ class EODEcosystemUpdater:
             )
 
     async def _display_ecosystem_analysis(self, snapshot) -> None:
-        """Display ecosystem analysis results."""
+        """
+        Display a human-readable summary of the ecosystem analysis contained in `snapshot`.
+        
+        Prints overall health score and status, a per-project health breakdown, cross-project insights (shared technologies and integration points) when present, and a short list of recommendations with a count.
+        
+        Parameters:
+            snapshot: An object representing the ingestion snapshot. Expected to expose:
+                - `ecosystem_health` (dict): contains `overall_score`, `status`, and optional `project_health` mapping.
+                - `cross_project_analysis` (dict, optional): may contain `shared_technologies` (list) and `integration_points` (list).
+                - `recommendations` (list, optional): textual recommendations or action items.
+        """
         print("\n🔍 ECOSYSTEM ANALYSIS")
         print("-" * 25)
 
@@ -184,7 +223,24 @@ class EODEcosystemUpdater:
                 print(f"  ... and {len(snapshot.recommendations) - 5} more")
 
     async def _store_daily_summary(self, snapshot) -> None:
-        """Store daily EOD summary in memOS."""
+        """
+        Store a formatted end-of-day (EOD) ecosystem summary in memOS as an episodic memory.
+        
+        Builds a human-readable content string from the provided `snapshot` (including snapshot ID, timestamp, processing totals, per-project insights, and recommendation count), attaches metadata (eod_summary flag, date, snapshot_id, projects_count, entry_type), and saves it via the memOS client.
+        
+        Parameters:
+            snapshot: An object representing the ingestion snapshot. Expected attributes used:
+                - snapshot_id (str)
+                - timestamp (str or datetime)
+                - total_projects (int)
+                - total_files (int)
+                - total_size_bytes (int)
+                - total_lines_of_code (int)
+                - ecosystem_health (mapping with key 'overall_score')
+                - projects (iterable of mappings with keys 'project_name', 'project_info' (containing 'status'), and 'files_processed')
+                - recommendations (iterable)
+        
+        """
         try:
             print("\n💾 STORING DAILY SUMMARY")
             print("-" * 25)
@@ -245,7 +301,12 @@ class EODEcosystemUpdater:
         # TODO: Display trends and changes
 
     def _calculate_execution_time(self) -> str:
-        """Calculate and format execution time."""
+        """
+        Return a human-readable elapsed time since the instance start time.
+        
+        Returns:
+            str: Formatted duration as "Xm Ys" when minutes are one or more, otherwise "Ys".
+        """
         duration = datetime.now() - self.start_time
         minutes = int(duration.total_seconds() // 60)
         seconds = int(duration.total_seconds() % 60)
@@ -253,7 +314,11 @@ class EODEcosystemUpdater:
 
 
 async def main():
-    """Main entry point for EOD ecosystem update."""
+    """
+    Parse command-line options and run the End-of-Day ecosystem update workflow.
+    
+    Parses the CLI flags --force, --no-historical, and --report-only, instantiates EODEcosystemUpdater, executes the requested update/report action, and prints the total execution time.
+    """
     parser = argparse.ArgumentParser(
         description="ApexSigma Ecosystem End of Day Update",
         formatter_class=argparse.RawDescriptionHelpFormatter,

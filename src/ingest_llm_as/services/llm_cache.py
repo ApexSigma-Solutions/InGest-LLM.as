@@ -39,14 +39,29 @@ class CacheEntry:
     ttl_seconds: int = 3600  # 1 hour default
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for Redis storage."""
+        """
+        Convert the CacheEntry to a dictionary suitable for Redis storage.
+        
+        Returns:
+            dict: Mapping of dataclass fields to serializable values. The `timestamp` field
+            is converted to an ISO 8601 string.
+        """
         data = asdict(self)
         data["timestamp"] = self.timestamp.isoformat()
         return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CacheEntry":
-        """Create from dictionary loaded from Redis."""
+        """
+        Create a CacheEntry from a dictionary produced by storage.
+        
+        Parameters:
+            data (dict): Dictionary in the storage format (as produced by CacheEntry.to_dict()),
+                with the "timestamp" field as an ISO 8601 string.
+        
+        Returns:
+            CacheEntry: A new CacheEntry instance with the "timestamp" converted to a datetime.
+        """
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
         return cls(**data)
 
@@ -82,7 +97,15 @@ class LLMCache:
         default_ttl: int = 3600,
         max_cache_size_mb: float = 100.0,
     ):
-        """Initialize the LLM cache."""
+        """
+        Configure the LLMCache instance with connection and sizing defaults.
+        
+        Parameters:
+            redis_url (str): Redis connection URL used to connect to the cache backend (default "redis://localhost:6379").
+            key_prefix (str): Namespace prefix prepended to all cache keys to avoid collisions (default "apexsigma:llm_cache:").
+            default_ttl (int): Default time-to-live in seconds applied to cache entries when no explicit TTL is provided (default 3600).
+            max_cache_size_mb (float): Target maximum cache size in megabytes; exceeding this triggers cleanup of oldest entries (default 100.0).
+        """
         self.redis_url = redis_url
         self.key_prefix = key_prefix
         self.default_ttl = default_ttl
@@ -99,7 +122,16 @@ class LLMCache:
         self.total_tokens_saved = 0
 
     async def connect(self) -> bool:
-        """Connect to Redis."""
+        """
+        Establishes a Redis connection and stores the connected client on the instance.
+        
+        If the Redis library is not available or the connection/ping fails, the instance's
+        `redis_client` remains unset (or unchanged) and the method returns `False`. On
+        success, `self.redis_client` is assigned a connected Redis client.
+        
+        Returns:
+            bool: `True` if a Redis client was created and verified reachable, `False` otherwise.
+        """
         if not REDIS_AVAILABLE:
             self.logger.warning("Redis library not available, cache disabled")
             return False
@@ -116,7 +148,17 @@ class LLMCache:
     def _generate_cache_key(
         self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate a cache key for the prompt."""
+        """
+        Create a deterministic, namespaced cache key for a model prompt.
+        
+        When provided, only the following metadata fields are incorporated into the key: "temperature", "max_tokens", "top_p", and "system_prompt". The key is the SHA-256 hex digest of the combined model, prompt, and selected metadata, prefixed with the instance's key_prefix.
+        
+        Parameters:
+            metadata (Dict[str, Any], optional): Optional request metadata; only stable fields listed above affect the generated key.
+        
+        Returns:
+            str: Namespaced cache key consisting of `self.key_prefix` followed by the SHA-256 hex digest of the content.
+        """
 
         # Create a hash based on prompt content and model
         content = f"{model}:{prompt}"
@@ -172,7 +214,17 @@ class LLMCache:
     async def get(
         self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[CacheEntry]:
-        """Get cached response for a prompt."""
+        """
+        Retrieve the cached entry for a given prompt and model.
+        
+        Parameters:
+            prompt (str): The prompt text used to generate the cache key.
+            model (str): The model identifier used to generate the cache key.
+            metadata (Dict[str, Any], optional): Stable request parameters (e.g., temperature, max_tokens, top_p, system_prompt) included when generating the cache key.
+        
+        Returns:
+            CacheEntry: The cached entry if present, `None` otherwise.
+        """
 
         if not self.redis_client:
             return None
@@ -214,7 +266,21 @@ class LLMCache:
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None,
     ) -> bool:
-        """Cache a prompt-response pair."""
+        """
+        Store a prompt-response pair in the cache with associated metadata and TTL.
+        
+        Parameters:
+            prompt (str): The prompt text used to generate the response.
+            response (str): The LLM-generated response to cache.
+            model (str): The model identifier associated with this response.
+            token_count (int): Number of tokens consumed to produce the response.
+            cost_estimate (float): Estimated cost for producing the response.
+            metadata (Dict[str, Any]): Optional additional data that influences cache key stability (e.g., temperature, max_tokens).
+            ttl_seconds (int): Optional time-to-live in seconds for this cache entry; falls back to the cache's default TTL when omitted.
+        
+        Returns:
+            bool: `True` if the entry was successfully stored in the cache, `False` otherwise.
+        """
 
         if not self.redis_client:
             return False
@@ -251,7 +317,17 @@ class LLMCache:
     async def delete(
         self, prompt: str, model: str, metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """Delete a cached entry."""
+        """
+        Delete the cache entry for a given prompt and model.
+        
+        Parameters:
+            prompt: The prompt text whose cached response should be removed.
+            model: The model identifier used when the entry was stored.
+            metadata: Optional request metadata that affects the cache key (e.g., temperature, max_tokens, system prompt).
+        
+        Returns:
+            `true` if an entry was deleted, `false` otherwise.
+        """
 
         if not self.redis_client:
             return False
@@ -266,7 +342,12 @@ class LLMCache:
             return False
 
     async def clear_model_cache(self, model: str) -> int:
-        """Clear all cached entries for a specific model."""
+        """
+        Remove all cache entries associated with the given model.
+        
+        Returns:
+            int: Number of cache entries deleted; 0 if Redis is unavailable or an error occurred.
+        """
 
         if not self.redis_client:
             return 0
@@ -297,7 +378,19 @@ class LLMCache:
             return 0
 
     async def get_stats(self) -> CacheStats:
-        """Get cache statistics."""
+        """
+        Collect aggregated cache metrics including counts, hit rate, size, cost and token savings, and oldest/newest entry timestamps.
+        
+        Returns:
+            CacheStats: Aggregated statistics containing:
+                - total_entries (int): Number of cached entries.
+                - hit_rate (float): Fraction of requests served from cache (0.0 to 1.0).
+                - total_cost_saved (float): Cumulative estimated cost saved by cache hits.
+                - total_tokens_saved (int): Cumulative tokens saved by cache hits.
+                - cache_size_mb (float): Total cache payload size in megabytes.
+                - oldest_entry (datetime | None): Timestamp of the oldest cached entry, or None if unavailable.
+                - newest_entry (datetime | None): Timestamp of the newest cached entry, or None if unavailable.
+        """
 
         if not self.redis_client:
             return CacheStats(0, 0.0, 0.0, 0, 0.0, None, None)
@@ -353,7 +446,11 @@ class LLMCache:
             return CacheStats(0, 0.0, 0.0, 0, 0.0, None, None)
 
     async def _cleanup_if_needed(self) -> None:
-        """Clean up cache if it exceeds size limits."""
+        """
+        Remove old cache entries when the cache exceeds the configured maximum size.
+        
+        When the total cache size in MB is greater than `self.max_cache_size_mb`, this routine scans stored entries, identifies entries by their stored timestamp, and deletes the oldest 25% of entries to reduce size. Corrupted entries (invalid JSON or missing/invalid timestamp) are removed during the scan. Information and error conditions are logged.
+        """
 
         try:
             stats = await self.get_stats()
@@ -397,7 +494,11 @@ class LLMCache:
             self.logger.error(f"Error during cache cleanup: {e}")
 
     async def close(self) -> None:
-        """Close Redis connection."""
+        """
+        Close the Redis client connection if one is established.
+        
+        If the cache has an active Redis client, close its connection and log the action; otherwise do nothing.
+        """
         if self.redis_client:
             await self.redis_client.close()
             self.logger.info("Redis connection closed")
@@ -426,19 +527,19 @@ async def cached_llm_request(
     ttl_seconds: Optional[int] = None,
 ) -> Tuple[str, bool]:
     """
-    Make an LLM request with caching.
-
-    Args:
-        prompt: The prompt to send
-        model: Model identifier
-        llm_function: Async function that makes the actual LLM call
-        token_count_estimate: Estimated token count for caching
-        cost_estimate: Estimated cost for the request
-        metadata: Additional metadata for cache key generation
-        ttl_seconds: Cache TTL override
-
+    Use the cache to return a cached LLM response for the given prompt and model, or call the provided async LLM function and cache its result.
+    
+    Parameters:
+        prompt (str): The prompt text to query the LLM with.
+        model (str): Model identifier used as part of the cache key.
+        llm_function (Callable[[str], Awaitable[str]]): Async callable that accepts the prompt and returns the response string.
+        token_count_estimate (int): Estimated token count for the response; used for cache metrics.
+        cost_estimate (float): Estimated cost for the request; used for cache metrics.
+        metadata (Dict[str, Any] | None): Optional metadata affecting cache key generation (e.g., temperature, system prompt).
+        ttl_seconds (int | None): Optional TTL override (seconds) for the cached entry.
+    
     Returns:
-        Tuple of (response, was_cached)
+        Tuple[str, bool]: The LLM response string and a boolean indicating whether the response was served from cache (`True`) or obtained from the LLM and then cached (`False`).
     """
 
     cache = await get_llm_cache()

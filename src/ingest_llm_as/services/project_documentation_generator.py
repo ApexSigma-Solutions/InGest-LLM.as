@@ -40,7 +40,15 @@ class ProjectDocumentationGenerator:
     """
 
     def __init__(self):
-        """Initialize the documentation generator."""
+        """
+        Create a ProjectDocumentationGenerator instance configured with a logger, analyzer, base project path, and project-to-path mapping.
+        
+        Attributes:
+            logger: Module-level logger configured via observability.logging.get_logger.
+            analyzer: Qwen-based project analyzer returned by get_qwen_project_analyzer().
+            base_path (Path): Base filesystem path that contains ApexSigma project directories.
+            projects (Dict[str, Path]): Mapping of project names to their corresponding Path locations within `base_path`.
+        """
         self.logger = get_logger(__name__)
         self.analyzer = get_qwen_project_analyzer()
 
@@ -56,10 +64,10 @@ class ProjectDocumentationGenerator:
 
     async def generate_all_project_documentation(self) -> Dict[str, bool]:
         """
-        Generate documentation for all ApexSigma projects.
-
+        Orchestrates generation of documentation for every configured ApexSigma project and produces an ecosystem-wide diagram.
+        
         Returns:
-            Dict[str, bool]: Success status for each project
+            Dict[str, bool]: Mapping from project name to `True` if documentation generation succeeded for that project, `False` otherwise.
         """
         self.logger.info("Starting project documentation generation for all projects")
 
@@ -104,13 +112,12 @@ class ProjectDocumentationGenerator:
 
     async def generate_single_project_documentation(self, project_name: str) -> bool:
         """
-        Generate documentation for a single project.
-
-        Args:
-            project_name: Name of the project to document
-
+        Generate documentation for a single configured project.
+        
+        Analyzes the specified project and its ecosystem relationships, then creates and writes the project's documentation artifacts (outline, Mermaid diagram, JSON data, README) into the project's documentation directory.
+        
         Returns:
-            bool: Success status
+            `True` if documentation generation succeeded, `False` otherwise.
         """
         if project_name not in self.projects:
             self.logger.error(f"Unknown project: {project_name}")
@@ -146,7 +153,20 @@ class ProjectDocumentationGenerator:
         outline: ProjectOutline,
         relationships: List[ServiceRelationship],
     ) -> bool:
-        """Generate documentation files for a single project."""
+        """
+        Generate and persist documentation artifacts for the specified project.
+        
+        Creates a .md/.projects directory under the given project path and writes four files there: an outline Markdown, a Mermaid diagram, a JSON data file containing the analysis, and a README describing the generated documentation.
+        
+        Parameters:
+            project_name (str): Project identifier used for filenames.
+            project_path (Path): Filesystem path to the project's root where the documentation directory will be created.
+            outline (ProjectOutline): Analysis outline describing the project's structure and metadata.
+            relationships (List[ServiceRelationship]): Ecosystem relationships to include in the project's documentation.
+        
+        Returns:
+            bool: `True` if all documentation files were written successfully, `False` otherwise.
+        """
 
         try:
             # Create .md/.projects directory
@@ -213,7 +233,17 @@ class ProjectDocumentationGenerator:
         relationships: List[ServiceRelationship],
         timestamp: datetime,
     ) -> str:
-        """Create comprehensive project outline in Markdown format."""
+        """
+        Builds a Markdown-formatted project outline that documents the project's description, components, APIs, data models, services, dependencies, integration points, and service relationships, and includes generation metadata.
+        
+        Parameters:
+            outline (ProjectOutline): The analyzed project outline containing project_name, description, architecture_type, core_components, api_endpoints, data_models, services, dependencies, key_features, and integration_points.
+            relationships (List[ServiceRelationship]): Ecosystem-level relationships to filter and display incoming and outgoing connections for this project.
+            timestamp (datetime): UTC timestamp used in the generated metadata header.
+        
+        Returns:
+            str: A Markdown document as a string representing the project's outline, diagrams-ready text for relationships, and generation notes.
+        """
 
         content = f"""# {outline.project_name} - Project Outline
 
@@ -354,7 +384,12 @@ class ProjectDocumentationGenerator:
     def _create_project_mermaid_diagram(
         self, outline: ProjectOutline, relationships: List[ServiceRelationship]
     ) -> str:
-        """Create project-specific Mermaid diagram."""
+        """
+        Generate a Mermaid diagram representing the project's architecture, core components, related services, and their relationships.
+        
+        Returns:
+            diagram (str): Mermaid-formatted diagram text containing a title, a graph with the main project node, up to five core component nodes, related service nodes, relationship edges (arrow style reflects relationship type), and CSS class definitions for styling.
+        """
 
         diagram = f"---\ntitle: {outline.project_name} Architecture\n---\n\n"
         diagram += "graph TD\n"
@@ -441,7 +476,23 @@ class ProjectDocumentationGenerator:
         relationships: List[ServiceRelationship],
         timestamp: datetime,
     ) -> Dict[str, Any]:
-        """Create structured JSON data for the project."""
+        """
+        Assemble a serializable dictionary that captures the project's analyzed data and its relevant service relationships.
+        
+        Parameters:
+            outline (ProjectOutline): The analyzed project outline containing metadata, components, endpoints, models, services, and integration points.
+            relationships (List[ServiceRelationship]): All service relationships in the ecosystem; only relationships where the project is source or target are included.
+            timestamp (datetime): UTC timestamp representing when the analysis was generated.
+        
+        Returns:
+            Dict[str, Any]: A dictionary with keys:
+                - "project_name": project identifier.
+                - "generated_at": ISO-8601 timestamp string.
+                - "analysis_model": identifier of the analysis model used.
+                - "project_data": object containing description, architecture_type, core_components, api_endpoints, data_models, services, dependencies, key_features, and integration_points.
+                - "relationships": list of relationship objects (source, target, relationship_type, protocol, description, data_flow) filtered for the project.
+                - "metadata": counts for total_components, total_endpoints, total_dependencies, and total_relationships.
+        """
 
         project_relationships = [
             {
@@ -483,7 +534,18 @@ class ProjectDocumentationGenerator:
     def _create_documentation_readme(
         self, project_name: str, timestamp: datetime
     ) -> str:
-        """Create README for the project documentation directory."""
+        """
+        Builds the README markdown for a project's documentation directory.
+        
+        The generated README describes the generated artifacts (outline, Mermaid diagram, JSON data), records generation metadata (timestamp and model), and provides commands and examples for regenerating, viewing, and consuming the documentation files.
+        
+        Parameters:
+            project_name (str): Project display name used in headings and filenames.
+            timestamp (datetime): UTC timestamp when the documentation was generated.
+        
+        Returns:
+            str: The README content as a Markdown-formatted string.
+        """
 
         content = f"""# {project_name} - Project Documentation
 
@@ -556,7 +618,14 @@ print(project_data['project_data']['description'])
         return content
 
     async def _generate_ecosystem_diagram(self, flow_diagram) -> None:
-        """Generate ecosystem-wide diagram in each project."""
+        """
+        Generate a Mermaid diagram representing the entire ApexSigma ecosystem and write it into each project's documentation directory.
+        
+        This function asks the analyzer to produce a single ecosystem Mermaid diagram from the provided flow_diagram and, for each configured project whose path exists, ensures a .md/.projects docs directory exists and writes the diagram to apexsigma_ecosystem.mmd. Successful writes are logged; failures during generation or file operations are logged by the function.
+        
+        Parameters:
+            flow_diagram: A project-ecosystem representation (projects and their relationships) used by the analyzer to produce the Mermaid diagram.
+        """
 
         try:
             ecosystem_mermaid = await self.analyzer.generate_mermaid_diagram(
@@ -581,7 +650,15 @@ print(project_data['project_data']['description'])
             self.logger.error(f"Failed to generate ecosystem diagram: {e}")
 
     def _get_relationship_arrow(self, rel_type: str) -> str:
-        """Get arrow representation for relationship type."""
+        """
+        Map a relationship type to a Unicode arrow symbol.
+        
+        Parameters:
+            rel_type (str): Relationship type identifier; expected values include "depends_on", "communicates_with", "stores_in", and "orchestrates".
+        
+        Returns:
+            str: A Unicode arrow representing the relationship; returns "→" if the relationship type is unknown.
+        """
         arrows = {
             "depends_on": "→",
             "communicates_with": "↔",
@@ -591,7 +668,11 @@ print(project_data['project_data']['description'])
         return arrows.get(rel_type, "→")
 
     async def close(self):
-        """Close the analyzer client."""
+        """
+        Shuts down the underlying project analyzer and releases its associated resources.
+        
+        Awaits the analyzer client's close operation to ensure any network connections or background tasks are cleanly terminated.
+        """
         await self.analyzer.close()
 
 
@@ -600,7 +681,12 @@ _doc_generator: Optional[ProjectDocumentationGenerator] = None
 
 
 def get_project_documentation_generator() -> ProjectDocumentationGenerator:
-    """Get the global project documentation generator instance."""
+    """
+    Get the singleton ProjectDocumentationGenerator instance.
+    
+    Returns:
+        ProjectDocumentationGenerator: The module-level singleton, created on first access.
+    """
     global _doc_generator
     if _doc_generator is None:
         _doc_generator = ProjectDocumentationGenerator()

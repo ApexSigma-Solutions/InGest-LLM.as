@@ -68,13 +68,25 @@ class CodeElement:
     content_hash: str = ""
 
     def __post_init__(self):
-        """Generate content hash after initialization."""
+        """
+        Set a content hash for the element if one was not provided.
+        
+        If `content_hash` is empty, compute a 16-character MD5 hash derived from the element's
+        `qualified_name` and `source_code` and assign it to `self.content_hash`.
+        """
         if not self.content_hash:
             content_for_hash = f"{self.qualified_name}:{self.source_code}"
             self.content_hash = hashlib.md5(content_for_hash.encode()).hexdigest()[:16]
 
     def to_searchable_content(self) -> str:
-        """Generate searchable content for the code element."""
+        """
+        Assembles a searchable text representation of the code element.
+        
+        The returned string includes the element type and qualified name, optional signature, optional docstring, decorators, parent class context, tags, and the full source code, with sections separated by blank lines.
+        
+        Returns:
+            A single string containing the assembled searchable content for the element.
+        """
         parts = []
 
         # Add element type and name
@@ -120,12 +132,22 @@ class ParsingResult:
 
     @property
     def element_count(self) -> int:
-        """Total number of elements extracted."""
+        """
+        Report the total number of extracted code elements.
+        
+        Returns:
+            count (int): The total number of extracted code elements.
+        """
         return len(self.elements)
 
     @property
     def function_count(self) -> int:
-        """Number of functions extracted."""
+        """
+        Number of extracted function and async function elements.
+        
+        Returns:
+            int: Count of elements whose `element_type` is `CodeElementType.FUNCTION` or `CodeElementType.ASYNC_FUNCTION`.
+        """
         return len(
             [
                 e
@@ -137,7 +159,12 @@ class ParsingResult:
 
     @property
     def class_count(self) -> int:
-        """Number of classes extracted."""
+        """
+        Get the number of class elements extracted.
+        
+        Returns:
+            int: Count of elements whose `element_type` is `CodeElementType.CLASS`.
+        """
         return len(
             [e for e in self.elements if e.element_type == CodeElementType.CLASS]
         )
@@ -147,6 +174,15 @@ class ASTVisitor(ast.NodeVisitor):
     """AST visitor for extracting code elements."""
 
     def __init__(self, source_lines: List[str], file_path: Optional[str] = None):
+        """
+        Initialize the visitor state with source lines and optional file path.
+        
+        Sets up containers for extracted CodeElement instances, class context tracking, and module-level import/dependency collection used during AST traversal.
+        
+        Parameters:
+            source_lines (List[str]): The source code split into lines for node source extraction and location mapping.
+            file_path (Optional[str]): Optional path of the source file used for qualified name resolution and module element creation.
+        """
         self.source_lines = source_lines
         self.file_path = file_path
         self.elements: List[CodeElement] = []
@@ -156,14 +192,29 @@ class ASTVisitor(ast.NodeVisitor):
         self.dependencies: Set[str] = set()
 
     def visit_Import(self, node: ast.Import):
-        """Visit import statements."""
+        """
+        Record modules referenced by an import statement into the visitor's import and dependency sets.
+        
+        Each module name from the import statement is added to self.imports and self.dependencies. Continues traversal for the node's children.
+        
+        Parameters:
+            node (ast.Import): The AST Import node being visited.
+        """
         for alias in node.names:
             self.imports.add(alias.name)
             self.dependencies.add(alias.name)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        """Visit from-import statements."""
+        """
+        Record names imported by a `from ... import ...` statement into the visitor's tracking sets.
+        
+        Parameters:
+            node (ast.ImportFrom): The AST node representing a `from <module> import <names>` statement.
+        
+        Details:
+            For each alias in the node, adds an entry of the form `<module>.<name>` to the visitor's `imports` and `dependencies` sets. Continues traversal by calling `generic_visit`.
+        """
         if node.module:
             for alias in node.names:
                 import_name = f"{node.module}.{alias.name}"
@@ -172,7 +223,18 @@ class ASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef):
-        """Visit class definitions."""
+        """
+        Extracts a class definition into a CodeElement and processes its nested members.
+        
+        Creates a CodeElement for the given AST ClassDef, recording the class name, qualified name,
+        base classes (stored in `custom_metadata["base_classes"]` and added to `dependencies`),
+        decorators, and tags (`"class"` and `"inheritance"` when bases are present). The created
+        element is appended to `self.elements`. The parser context (`class_stack` and `current_class`)
+        is updated while child nodes are visited and restored after processing.
+        
+        Parameters:
+            node (ast.ClassDef): The AST node representing the class definition to visit.
+        """
         # Build qualified name
         parent_path = ".".join(self.class_stack) if self.class_stack else ""
         qualified_name = f"{parent_path}.{node.name}" if parent_path else node.name
@@ -219,11 +281,24 @@ class ASTVisitor(ast.NodeVisitor):
         self._process_function(node, CodeElementType.FUNCTION)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-        """Visit async function definitions."""
+        """
+        Handle an async function definition node and record it as an ASYNC_FUNCTION code element.
+        
+        Parameters:
+            node (ast.AsyncFunctionDef): AST node representing the async function to process.
+        """
         self._process_function(node, CodeElementType.ASYNC_FUNCTION)
 
     def _process_function(self, node: ast.FunctionDef, element_type: CodeElementType):
-        """Process function or async function nodes."""
+        """
+        Create a CodeElement for the given function/async function AST node and append it to self.elements.
+        
+        Processes the node to determine its qualified name and element type (adjusting for methods when inside a class), extracts the signature and decorators, assigns tags (e.g., function, method, async, decorated, generator), computes cyclomatic complexity, gathers function dependencies, and sets the element's metadata. If signature extraction fails, a warning is logged. Nested function bodies are not visited.
+        
+        Parameters:
+        	node (ast.FunctionDef): The AST node representing the function or async function to process.
+        	element_type (CodeElementType): The initial element type; may be adjusted to a method-specific type when the function is a method of the current class.
+        """
         # Build qualified name
         if self.current_class:
             qualified_name = f"{self.current_class}.{node.name}"
@@ -285,7 +360,19 @@ class ASTVisitor(ast.NodeVisitor):
         qualified_name: str,
         parent_class: Optional[str] = None,
     ) -> CodeElement:
-        """Create a CodeElement from an AST node."""
+        """
+        Create a CodeElement representing the given AST node.
+        
+        Parameters:
+            node (ast.AST): AST node to convert into a CodeElement; its location is used for line range.
+            element_type (CodeElementType): Type of the code element (e.g., FUNCTION, CLASS).
+            name (str): Short name of the element (unqualified).
+            qualified_name (str): Fully qualified name including parent context.
+            parent_class (Optional[str]): Name of the enclosing class if the element is a class member.
+        
+        Returns:
+            CodeElement: An element containing the node's source code and docstring, file path, start/end line numbers, parent class, and collected dependencies.
+        """
 
         # Extract source code
         source_code = self._extract_source_code(node)
@@ -307,7 +394,12 @@ class ASTVisitor(ast.NodeVisitor):
         )
 
     def _extract_source_code(self, node: ast.AST) -> str:
-        """Extract source code for a node."""
+        """
+        Extract the source code corresponding to an AST node, with fallbacks for older Python versions.
+        
+        Returns:
+            source (str): The source code snippet for the node, or a placeholder message if extraction is not possible.
+        """
         try:
             # Try using ast.unparse for Python 3.9+
             return ast.unparse(node)
@@ -321,7 +413,15 @@ class ASTVisitor(ast.NodeVisitor):
                 return f"# Unable to extract source for {type(node).__name__}"
 
     def _extract_signature(self, node: ast.FunctionDef) -> str:
-        """Extract function signature."""
+        """
+        Builds a human-readable function signature from an AST FunctionDef node.
+        
+        Parameters:
+        	node (ast.FunctionDef): AST node for the function whose signature will be produced.
+        
+        Returns:
+        	signature (str): The function signature including parameter names, annotations, default values, varargs (`*args`), kwargs (`**kwargs`), and return annotation (e.g. "func(a: int = 1, *args, **kwargs) -> str").
+        """
         args = []
 
         # Regular arguments
@@ -365,7 +465,15 @@ class ASTVisitor(ast.NodeVisitor):
         return self.current_class is not None
 
     def _determine_method_type(self, node: ast.FunctionDef) -> CodeElementType:
-        """Determine specific method type."""
+        """
+        Classifies a function AST node as a specific method kind based on its decorators.
+        
+        Parameters:
+            node (ast.FunctionDef): The function AST node to inspect for method decorators.
+        
+        Returns:
+            CodeElementType: `CodeElementType.PROPERTY` if decorated with `@property`, `CodeElementType.STATICMETHOD` if decorated with `@staticmethod`, `CodeElementType.CLASSMETHOD` if decorated with `@classmethod`, otherwise `CodeElementType.METHOD`.
+        """
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
                 if decorator.id == "property":
@@ -377,14 +485,30 @@ class ASTVisitor(ast.NodeVisitor):
         return CodeElementType.METHOD
 
     def _has_yield(self, node: ast.FunctionDef) -> bool:
-        """Check if function contains yield statements."""
+        """
+        Determine whether a function AST node contains any `yield` or `yield from` expressions.
+        
+        Parameters:
+            node (ast.FunctionDef): The function AST node to inspect.
+        
+        Returns:
+            true if the node contains a `yield` or `yield from` expression, false otherwise.
+        """
         for child in ast.walk(node):
             if isinstance(child, (ast.Yield, ast.YieldFrom)):
                 return True
         return False
 
     def _calculate_complexity(self, node: ast.FunctionDef) -> int:
-        """Calculate cyclomatic complexity."""
+        """
+        Estimate the cyclomatic complexity of the given function AST node.
+        
+        Parameters:
+            node (ast.FunctionDef): The AST node representing the function or async function to analyze.
+        
+        Returns:
+            int: Cyclomatic complexity as an integer; computed as a base of 1 plus one for each occurrence of `if`, `while`, `for`, `async for`, `except` handler, and boolean operators `and`/`or`.
+        """
         complexity = 1  # Base complexity
 
         for child in ast.walk(node):
@@ -398,7 +522,12 @@ class ASTVisitor(ast.NodeVisitor):
         return complexity
 
     def _extract_function_dependencies(self, node: ast.FunctionDef) -> List[str]:
-        """Extract dependencies used within the function."""
+        """
+        Extract names of external identifiers referenced inside the function.
+        
+        Returns:
+            List[str]: Up to 10 unique identifier names referenced in the function body, excluding names that start with "_" and the conventional method receivers `self` and `cls`.
+        """
         deps = set()
 
         for child in ast.walk(node):
@@ -434,12 +563,18 @@ class PythonASTParser:
     def parse_file(self, file_path: str) -> ParsingResult:
         """
         Parse a Python file and extract code elements.
-
-        Args:
-            file_path: Path to the Python file to parse
-
+        
+        Parameters:
+            file_path (str): Path to the Python file to parse.
+        
         Returns:
-            ParsingResult: Results of parsing including extracted elements
+            result (ParsingResult): Parsing outcome containing:
+                - success (bool): Whether parsing succeeded.
+                - file_path (str): The parsed file path.
+                - elements (list[CodeElement]): Extracted code elements (may be empty).
+                - errors (list[str]): Error messages if parsing failed.
+                - warnings (list[str]): Non-fatal parsing warnings.
+                - processing_time_ms (int): Time spent parsing in milliseconds.
         """
         start_time = datetime.now()
 
@@ -472,14 +607,14 @@ class PythonASTParser:
         self, source_code: str, file_path: Optional[str] = None
     ) -> ParsingResult:
         """
-        Parse Python source code and extract code elements.
-
-        Args:
-            source_code: Python source code to parse
-            file_path: Optional file path for context
-
+        Parse Python source code and extract structured code elements.
+        
+        Parameters:
+            source_code (str): Python source to parse.
+            file_path (Optional[str]): Optional file path used for context (affects module element name and log messages).
+        
         Returns:
-            ParsingResult: Results of parsing including extracted elements
+            ParsingResult: Result of parsing. `success` is `True` when parsing completed without exception; `elements` contains extracted CodeElement instances (a module element may be prepended when module-level code is present); `errors` and `warnings` record parsing issues; `total_lines` is set to the number of source lines.
         """
         result = ParsingResult(success=False, file_path=file_path)
 
@@ -519,7 +654,15 @@ class PythonASTParser:
         return result
 
     def _has_module_level_code(self, tree: ast.AST) -> bool:
-        """Check if there's significant module-level code."""
+        """
+        Determine whether an AST tree contains at least three significant top-level statements (ignoring module docstrings).
+        
+        Parameters:
+            tree (ast.AST): The AST node to inspect, typically the module-level AST.
+        
+        Returns:
+            `true` if the tree contains three or more significant top-level nodes (assignments, expressions excluding docstrings, if/for/while), `false` otherwise.
+        """
         significant_nodes = 0
 
         for node in ast.walk(tree):
@@ -537,7 +680,18 @@ class PythonASTParser:
     def _create_module_element(
         self, source_code: str, file_path: Optional[str]
     ) -> CodeElement:
-        """Create a module-level code element."""
+        """
+        Create a CodeElement representing the module defined by the given source.
+        
+        The returned element contains the module docstring (if present), the original source, the file path (if provided), a name derived from the file path stem or `"module"` when no path is given, and a line range that spans the source.
+        
+        Parameters:
+            source_code (str): Complete source code of the module.
+            file_path (Optional[str]): Path to the source file; used to derive the module name when provided.
+        
+        Returns:
+            CodeElement: A module-level CodeElement populated with name, qualified_name, source_code, docstring, file_path, line_start, line_end, and tags indicating module/top-level.
+        """
         tree = ast.parse(source_code)
         docstring = ast.get_docstring(tree)
 
@@ -562,15 +716,15 @@ class PythonASTParser:
         self, directory_path: str, recursive: bool = True, file_pattern: str = "*.py"
     ) -> List[ParsingResult]:
         """
-        Parse all Python files in a directory.
-
-        Args:
-            directory_path: Path to directory to parse
-            recursive: Whether to parse subdirectories
-            file_pattern: Pattern for Python files
-
+        Parse Python files in a directory and return a ParsingResult for each file processed.
+        
+        Parameters:
+            directory_path (str): Path to the directory to search for Python files.
+            recursive (bool): If true, include files in subdirectories.
+            file_pattern (str): Glob pattern for matching files (currently unused; default `"*.py"`).
+        
         Returns:
-            List[ParsingResult]: Results for each file parsed
+            List[ParsingResult]: A list of parsing results, one per file examined.
         """
         results = []
         path = Path(directory_path)
@@ -611,14 +765,14 @@ def extract_code_elements(
     source_code: str, file_path: Optional[str] = None
 ) -> List[CodeElement]:
     """
-    Convenience function to extract code elements from Python source.
-
-    Args:
-        source_code: Python source code
-        file_path: Optional file path for context
-
+    Convenience function that extracts CodeElement objects from Python source.
+    
+    Parameters:
+        source_code (str): Python source code to parse.
+        file_path (Optional[str]): Optional file path used for context (for example to derive module name and locations).
+    
     Returns:
-        List[CodeElement]: Extracted code elements
+        List[CodeElement]: A list of extracted CodeElement instances; an empty list if parsing failed.
     """
     parser = PythonASTParser()
     result = parser.parse_source(source_code, file_path)

@@ -52,22 +52,16 @@ async def ingest_python_repository(
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> RepositoryIngestionResponse:
     """
-    Ingest a Python repository for comprehensive code analysis.
-
-    This endpoint processes entire Python repositories, extracting code elements,
-    generating embeddings, and storing everything in the memOS.as memory system
-    with full observability and analysis.
-
-    Args:
-        request: Repository ingestion request with source and configuration
-        background_tasks: FastAPI background tasks for async processing
-        memos_client: memOS.as client dependency
-
+    Ingest a Python repository: start processing, analysis, and storage, and produce an ingestion status/result.
+    
+    Parameters:
+        request (RepositoryIngestionRequest): Ingestion parameters including source, file limits, and `process_async` flag. If `process_async` is true, the returned response is stored for later status queries.
+        
     Returns:
-        RepositoryIngestionResponse: Processing status and results
-
+        RepositoryIngestionResponse: The ingestion result including `ingestion_id`, processing status, file counts, and timing/summary information.
+    
     Raises:
-        HTTPException: On validation or processing errors
+        HTTPException: For validation, processing failures, or memory-storage (memOS) availability/API errors.
     """
     start_time = time.time()
     ingestion_id = uuid4()
@@ -377,14 +371,24 @@ def _perform_repository_analysis(
     ingestion_response: RepositoryIngestionResponse, analysis_type: str
 ) -> Dict[str, Any]:
     """
-    Perform comprehensive repository analysis.
-
-    Args:
-        ingestion_response: Results from repository ingestion
-        analysis_type: Type of analysis to perform
-
+    Compute quantitative codebase metrics and actionable suggestions from a completed repository ingestion.
+    
+    If the provided ingestion_response lacks a processing_summary, returns a default analysis with zeroed metrics and a single suggestion indicating incomplete processing.
+    
+    Parameters:
+        analysis_type (str): Requested analysis variant (e.g., "summary", "recommendations"); influences selection of computed suggestions but does not change the returned schema.
+    
     Returns:
-        Dict[str, Any]: Analysis results
+        Dict[str, Any]: Analysis results containing:
+            - total_lines_of_code (int): Estimated total lines of code across completed files.
+            - code_to_comment_ratio (float): Estimated ratio of code to comments (placeholder value if not computed).
+            - average_function_complexity (float): Average function/module complexity reported by ingestion.
+            - module_dependencies (dict): Placeholder mapping of module dependency information (empty if not analyzed).
+            - class_hierarchy (dict): Placeholder representation of class inheritance structure (empty if not analyzed).
+            - documentation_coverage (float): Fraction of completed Python files containing extracted documentation (0.0–1.0).
+            - test_coverage_estimate (float): Estimated ratio of test files to Python files (capped at 1.0).
+            - optimization_suggestions (List[str]): Human-readable recommendations to improve the repository (e.g., refactoring, docs, tests).
+            - refactoring_opportunities (List[str]): Specific refactoring actions inferred from analysis (may be empty).
     """
     if not ingestion_response.processing_summary:
         return {

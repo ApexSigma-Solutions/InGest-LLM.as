@@ -27,7 +27,11 @@ except ImportError as e:
 
 
 async def analyze_current_repository():
-    """Analyze the current InGest-LLM.as repository."""
+    """
+    Generate a detailed analysis report for the current repository and print it to stdout.
+    
+    Performs a repository ingestion request using the repository processor and prints discovery metrics, processing summaries, file-type distributions, largest and most complex files, processing errors, per-file success/failure breakdown, Python-specific metrics, repository insights (sizes and test coverage), and actionable recommendations. Analysis results and metadata are stored in memOS and referenced by the printed ingestion ID.
+    """
 
     print("=" * 60)
     print("INGEST-LLM.AS REPOSITORY ANALYSIS REPORT")

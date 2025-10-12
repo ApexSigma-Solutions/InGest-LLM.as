@@ -12,10 +12,10 @@ from typing import Dict, Any
 
 def generate_eod_command_config() -> Dict[str, Any]:
     """
-    Generate the tools.as command configuration for ecosystem EOD updates.
-
+    Generate the tools.as command configuration for the ecosystem End-of-Day (EOD) update.
+    
     Returns:
-        Dict[str, Any]: Command configuration for tools.as
+        dict: A dictionary representing the complete tools.as command configuration for the EOD ecosystem update.
     """
 
     command_config = {
@@ -121,10 +121,10 @@ def generate_eod_command_config() -> Dict[str, Any]:
 
 def generate_ecosystem_workflow_config() -> Dict[str, Any]:
     """
-    Generate workflow configuration for comprehensive ecosystem management.
-
+    Generate the workflow configuration for ecosystem management.
+    
     Returns:
-        Dict[str, Any]: Workflow configuration
+        workflow_config (Dict[str, Any]): Dictionary describing workflow metadata, ordered stages (with schedules, commands, parameters, success/failure handling, and additional steps), notification channels and escalation paths, and data retention policies.
     """
 
     workflow_config = {
@@ -199,10 +199,16 @@ def generate_ecosystem_workflow_config() -> Dict[str, Any]:
 
 def create_tools_as_integration_files(output_dir: str = "integration_configs") -> None:
     """
-    Create integration configuration files for tools.as.
-
-    Args:
-        output_dir: Directory to store integration files
+    Create on-disk integration configuration files for the Tools.as EOD ecosystem workflow.
+    
+    Creates the output directory (if missing) and writes four files into it:
+    - eod_ecosystem_command.json: command configuration (JSON)
+    - ecosystem_workflow.json: workflow configuration (JSON)
+    - eod_ecosystem.command.as.toml: Tools.as-compatible TOML command
+    - README.md: integration documentation and usage notes
+    
+    Parameters:
+        output_dir (str): Path to the directory where files will be written; created if it does not exist.
     """
 
     output_path = Path(output_dir)
@@ -246,7 +252,12 @@ def create_tools_as_integration_files(output_dir: str = "integration_configs") -
 
 
 def generate_tools_as_toml() -> str:
-    """Generate tools.as compatible TOML command configuration."""
+    """
+    Produce a Tools.as-compatible TOML string describing the EOD ecosystem command configuration.
+    
+    Returns:
+        toml_config (str): TOML-formatted command configuration for the "eod-ecosystem" integration.
+    """
 
     toml_config = """# ApexSigma Ecosystem EOD Command Configuration
 # This file integrates ecosystem ingestion into the tools.as command system
@@ -335,7 +346,14 @@ structured_logging = true
 
 
 def generate_integration_readme() -> str:
-    """Generate README for tools.as integration."""
+    """
+    Produce the Markdown README describing the Tools.as integration for ApexSigma ecosystem ingestion.
+    
+    The README explains the generated files, installation and integration steps, usage examples and CLI flags, scheduling defaults, outputs produced, monitoring and dependencies, common troubleshooting steps, and options for configuration customization and workflow integration.
+    
+    Returns:
+        readme_content (str): The README content as a Markdown-formatted string.
+    """
 
     readme_content = """# Tools.as Integration for Ecosystem Ingestion
 

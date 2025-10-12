@@ -52,6 +52,18 @@ class IngestionMetadata(BaseModel):
     )
 
     @field_validator("tags")
+    def validate_tags(cls, v):
+        """
+        Normalize a list of tags by stripping whitespace and removing empty entries.
+        
+        Strips leading and trailing whitespace from each tag and excludes any tags that are empty after stripping.
+        
+        Parameters:
+            v (list[str]): The input list of tag strings to normalize.
+        
+        Returns:
+            list[str]: A list of cleaned, non-empty tag strings.
+        """
     def validate_tags(cls, v: List[str]) -> List[str]:
         """Ensure tags are non-empty strings."""
         return [tag.strip() for tag in v if tag and tag.strip()]
@@ -73,6 +85,19 @@ class IngestionRequest(BaseModel):
     process_async: bool = Field(False, description="Whether to process asynchronously")
 
     @field_validator("content")
+    def validate_content(cls, v):
+        """
+        Validate that `content` contains non-whitespace characters and return it trimmed.
+        
+        Parameters:
+            v (str): The input content to validate.
+        
+        Returns:
+            str: The input string with leading and trailing whitespace removed.
+        
+        Raises:
+            ValueError: If the trimmed content is empty.
+        """
     def validate_content(cls, v: str) -> str:
         """Ensure content is not empty after stripping."""
         stripped = v.strip()
@@ -251,6 +276,21 @@ class RepositoryIngestionRequest(BaseModel):
     metadata: IngestionMetadata
 
     @field_validator("source_path")
+    def validate_source_path(cls, v, values):
+        """
+        Validate the repository source path according to the `repository_source` field.
+        
+        Parameters:
+            v (str): The source path or URL to validate.
+            values (pydantic.fields.ModelField | dict): Other model values; used to read `repository_source`.
+        
+        Returns:
+            str: The original `v` if validation succeeds.
+        
+        Raises:
+            ValueError: If `repository_source` is `RepositorySource.LOCAL_PATH` and `v` does not exist or is not a directory, or if `repository_source` is a URL type and `v` does not start with `http://`, `https://`, or `git://`.
+        """
+        repository_source = values.data.get("repository_source")
     def validate_source_path(cls, v: str, info: ValidationInfo) -> str:
         """Validate the source path based on repository source."""
         repository_source = info.data.get("repository_source")
@@ -274,6 +314,19 @@ class RepositoryIngestionRequest(BaseModel):
         return v
 
     @field_validator("include_patterns")
+    def validate_include_patterns(cls, v):
+        """
+        Ensure at least one include pattern is provided.
+        
+        Parameters:
+            v (list[str]): The include patterns to validate.
+        
+        Returns:
+            list[str]: The validated include patterns.
+        
+        Raises:
+            ValueError: If `v` is empty or falsy.
+        """
     def validate_include_patterns(cls, v: List[str]) -> List[str]:
         """Ensure at least one include pattern."""
         if not v:

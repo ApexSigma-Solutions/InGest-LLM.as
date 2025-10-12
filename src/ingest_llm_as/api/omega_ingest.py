@@ -40,11 +40,21 @@ class QueryContextResponse(BaseModel):
 @router.post("/query_context", response_model=QueryContextResponse)
 async def query_context(request: QueryContextRequest):
     """
-    Query the Master Knowledge Graph for relevant context.
-
-    This endpoint fulfills the Omega Ingest Laws requirement for context retrieval
-    before making code changes. It searches across all available knowledge domains
-    for information relevant to the query.
+    Retrieve relevance-scored knowledge items matching the provided query across configured knowledge domains.
+    
+    Parameters:
+        request: QueryContextRequest containing the search `query`, optional `domain` to restrict search, `max_results` to limit returned items, and `include_metadata` to include item metadata.
+    
+    Returns:
+        QueryContextResponse with:
+          - `query`: the original query string,
+          - `results`: a list of result dictionaries (each with `content`, `source`, `priority`, `relevance_score`, `domain`, and optionally `metadata`),
+          - `total_results`: number of results returned,
+          - `domains_searched`: list of domains that were searched,
+          - `timestamp`: ISO timestamp of the response.
+    
+    Raises:
+        HTTPException: with status code 500 if an internal error occurs while processing the query.
     """
     try:
         logger.info(f"🔍 Context query received: {request.query}")
@@ -232,9 +242,20 @@ def get_omega_ingest_guardian():
 
     class MockOmegaIngestGuardian:
         def __init__(self):
+            """
+            Initialize a mock Omega Ingest Guardian instance.
+            
+            Sets the instance attribute `status` to "ready".
+            """
             self.status = "ready"
 
         def get_status(self):
+            """
+            Return the current mock guardian status and operational mode.
+            
+            Returns:
+                dict: A mapping with keys `status` (e.g., `"ready"`) and `mode` (e.g., `"operational"`).
+            """
             return {"status": "ready", "mode": "operational"}
 
     return MockOmegaIngestGuardian()
@@ -243,7 +264,20 @@ def get_omega_ingest_guardian():
 @router.get("/status")
 async def get_omega_ingest_status():
     """
-    Get current status of the Master Knowledge Graph.
+    Return a dictionary describing the current status and capabilities of the Master Knowledge Graph guardian.
+    
+    Returns:
+        status_info (dict): A mapping with the following keys:
+            - guardian_role (str): Role label for the guardian.
+            - mandate (str): Guardian mandate description.
+            - knowledge_sources (dict): Counts and coverage details with keys
+                `core_projects` (int), `meta_knowledge_sources` (int), and `total_coverage` (str).
+            - storage_tiers (List[str]): Named storage/memory tiers.
+            - capabilities (List[str]): Supported capabilities and features.
+            - status (str): Operational status (e.g., "ready").
+    
+    Raises:
+        HTTPException: If an internal error occurs while assembling the status.
     """
     try:
         # Get basic status information
@@ -282,7 +316,16 @@ async def get_omega_ingest_status():
 @router.get("/knowledge-domains")
 async def get_knowledge_domains():
     """
-    Get available knowledge domains in the Master Knowledge Graph.
+    Provide the available knowledge domains and relationship types from the Master Knowledge Graph.
+    
+    Returns:
+        dict: Mapping with three keys:
+            - "core_domains": mapping of core domain identifiers to brief descriptions.
+            - "meta_domains": mapping of meta domain identifiers to brief descriptions.
+            - "relationship_types": list of relationship type names used between domains and entities.
+    
+    Raises:
+        HTTPException: If an unexpected error occurs while retrieving the domain definitions (results in HTTP 500).
     """
     try:
         domains = {
@@ -330,7 +373,16 @@ async def get_knowledge_domains():
 @router.get("/poml-components")
 async def get_poml_components():
     """
-    Get available POML components for LLM consumption.
+    Provide available POML component definitions, optimization features, and use cases.
+    
+    Returns:
+        components (dict): Dictionary with keys:
+            - component_types (dict): Mapping of POML component type identifiers to short descriptive labels.
+            - optimization_features (List[str]): Features that optimize components for LLM consumption.
+            - use_cases (List[str]): Typical use cases supported by the POML components.
+    
+    Raises:
+        HTTPException: If retrieval fails due to an internal error.
     """
     try:
         components = {

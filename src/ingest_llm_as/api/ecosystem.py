@@ -75,20 +75,16 @@ async def ingest_ecosystem(
     request: EcosystemIngestionRequest, background_tasks: BackgroundTasks
 ):
     """
-    Ingest the entire ApexSigma ecosystem.
-
-    This endpoint scrapes, analyzes, and embeds all four core projects:
-    - InGest-LLM.as
-    - memos.as
-    - devenviro.as
-    - tools.as
-
-    The process includes:
-    - Repository processing and analysis
-    - Code structure documentation
-    - Cross-project relationship mapping
-    - Historical snapshot storage in memOS
-    - Ecosystem health assessment
+    Trigger ingestion of the entire ApexSigma ecosystem according to the options in `request`.
+    
+    Parameters:
+        request (EcosystemIngestionRequest): Controls ingestion behavior (e.g., whether to store historical snapshots, whether to generate cross-project analysis, and whether to force refresh).
+        
+    Returns:
+        EcosystemIngestionResponse: Snapshot metadata and processing metrics including snapshot ID, timestamp, projects/files processed, total size (MB), processing time (ms), ecosystem health score, and recommendations count.
+    
+    Raises:
+        HTTPException: If ingestion fails.
     """
     start_time = datetime.now()
 
@@ -132,12 +128,11 @@ async def ingest_ecosystem(
 @router.get("/health", response_model=EcosystemHealthResponse)
 async def get_ecosystem_health():
     """
-    Get current ecosystem health status.
-
-    Returns health metrics across all projects including:
-    - Overall health score
-    - Individual project status
-    - Assessment timestamp
+    Return a snapshot of the ecosystem health assessment.
+    
+    Returns:
+        EcosystemHealthResponse: Current assessment including `overall_score`, `status`, `successful_projects`,
+        `total_projects`, `project_health` (mapping of project name to status), and `assessment_timestamp` (ISO 8601 UTC).
     """
     try:
         # This would typically query the latest snapshot from memOS
@@ -168,9 +163,12 @@ async def get_ecosystem_health():
 @router.get("/projects", response_model=Dict[str, ProjectSummaryResponse])
 async def get_project_summaries():
     """
-    Get summaries of all projects in the ecosystem.
-
-    Returns individual project metrics and status information.
+    Provide summaries for all projects in the ecosystem.
+    
+    Currently returns placeholder ProjectSummaryResponse objects for each project; intended to query memOS for the latest project snapshots once implemented.
+    
+    Returns:
+        dict: Mapping of project name (str) to `ProjectSummaryResponse` containing per-project metrics and status.
     """
     try:
         # This would typically query the latest snapshots from memOS
@@ -228,9 +226,19 @@ async def get_project_summaries():
 @router.get("/snapshots/{snapshot_id}")
 async def get_ecosystem_snapshot(snapshot_id: str):
     """
-    Get a specific ecosystem snapshot by ID.
-
-    Returns detailed information about a historical ecosystem snapshot.
+    Retrieve a historical ecosystem snapshot by its identifier.
+    
+    Parameters:
+        snapshot_id (str): Identifier of the snapshot to retrieve.
+    
+    Returns:
+        dict: A mapping with keys:
+            - `snapshot_id` (str): The requested snapshot ID.
+            - `message` (str): Human-readable status or information about the snapshot.
+            - `note` (str): Additional context (e.g., whether the response is a placeholder).
+    
+    Raises:
+        HTTPException: If retrieval fails.
     """
     try:
         # TODO: Implement memOS query for specific snapshot
@@ -251,9 +259,14 @@ async def get_ecosystem_snapshot(snapshot_id: str):
 @router.get("/analysis/cross-project")
 async def get_cross_project_analysis():
     """
-    Get cross-project analysis including dependencies and relationships.
-
-    Returns analysis of relationships between ecosystem projects.
+    Provide cross-project analysis of dependencies and relationships between ecosystem projects.
+    
+    Returns:
+        analysis (dict): A mapping with the following keys:
+            - dependency_matrix (dict[str, list[str]]): Per-project lists of direct dependencies or integrated components.
+            - shared_technologies (list[str]): Technologies used across multiple projects.
+            - integration_points (list[str]): Descriptions of notable integration or interaction points between projects.
+            - architecture_patterns (list[str]): Common architectural patterns observed across the ecosystem.
     """
     try:
         # TODO: Implement memOS query for latest cross-project analysis

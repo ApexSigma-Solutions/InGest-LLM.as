@@ -50,7 +50,12 @@ def read_root():
 @app.get("/health", response_model=HealthResponse)
 def health_check():
     """
-    Comprehensive health check endpoint with observability status.
+    Return aggregated health information for the service including observability and dependency details.
+    
+    This response contains the service name and version from configuration, a dependencies mapping that includes the memOS base URL plus any observability integrations, and observability status fields (metrics/tracing/logging) provided by the observability subsystem.
+    
+    Returns:
+        HealthResponse: Health model containing `service`, `version`, `dependencies`, and observability-related fields.
     """
 
     try:
@@ -100,6 +105,12 @@ def health_check():
 
         return response
 
+    return HealthResponse(
+        service=settings.app_name,
+        version=settings.app_version,
+        dependencies=dependencies,
+        **obs_status.get("observability", {}),
+    )
     except Exception as e:
         # If health check itself fails, return error status
         return HealthResponse(

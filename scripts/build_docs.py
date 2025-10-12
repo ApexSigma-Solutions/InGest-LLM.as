@@ -38,6 +38,22 @@ except ImportError as e:
 class DocumentationBuilder:
     """Automated documentation builder for ApexSigma projects."""
 
+    def __init__(self, base_path: str = None):
+        """
+        Create a DocumentationBuilder configured for a workspace of ApexSigma projects.
+        
+        Parameters:
+            base_path (str | None): Optional filesystem path to the root directory containing ApexSigma projects. If omitted, a default development path is used.
+        
+        Description:
+            Initializes internal state including a mapping of known project names to their paths, a ContextBulletGenerator for producing context bullets, and an optional embedding analyzer instance (set to None if embedding analysis is unavailable).
+        """
+        self.base_path = (
+            Path(base_path)
+            if base_path
+            else Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+        )
+        self.projects = {
     def __init__(self, base_path: Optional[str] = None, projects: Optional[Dict[str, str]] = None):
         """Initialize the documentation builder."""
         if base_path:
@@ -104,7 +120,15 @@ class DocumentationBuilder:
         include_project_docs: bool = True,
         force_refresh: bool = False,
     ) -> None:
-        """Build all documentation for all projects."""
+        """
+        Orchestrates generation and updating of documentation for all known projects.
+        
+        Parameters:
+        	include_embeddings (bool): If True, include embedding analysis when an embedding analyzer is available.
+        	include_context_bullets (bool): If True, generate ecosystem and per-project context bullets.
+        	include_project_docs (bool): If True, generate per-project README and status documents.
+        	force_refresh (bool): If True, force regeneration of artifacts even if they already exist.
+        """
 
         print("=" * 80)
         print("APEXSIGMA AUTOMATED DOCUMENTATION BUILDER")
@@ -187,6 +211,12 @@ class DocumentationBuilder:
 
         print()
 
+    async def _build_context_bullets(self) -> None:
+        """
+        Generate and save an ecosystem-wide context bullet into each project's documentation directory.
+        
+        Generates an ecosystem-level context bullet and writes it to each project's .md/.projects/context_bullet.md file, reporting per-project success or failure.
+        """
     async def _build_context_bullets(self, force_refresh: bool = False) -> None:
         """Build context bullets for all projects."""
 
@@ -224,6 +254,18 @@ class DocumentationBuilder:
 
         print()
 
+    async def _build_embedding_analysis(self) -> None:
+        """
+        Generate and write embedding analysis reports for each project and for the ecosystem.
+        
+        For each known project that exists on disk, writes a per-project report named
+        `embedding_analysis.md` into the project's `.md/.projects` directory. Also writes
+        a consolidated ecosystem report named `ecosystem_embedding_analysis.md` into
+        the main project's (InGest-LLM.as) `.md/.projects` directory. If the embedding
+        analyzer is not available the method prints a warning and returns without
+        writing files. Exceptions encountered during generation or file writes are
+        caught and printed; they are not re-raised.
+        """
     async def _build_embedding_analysis(self, force_refresh: bool = False) -> None:
         """Build embedding analysis documentation."""
 
@@ -286,6 +328,12 @@ class DocumentationBuilder:
 
         print()
 
+    async def _build_project_documentation(self) -> None:
+        """
+        Generate README and project status documents for each known project and save them into the project's documentation directory.
+        
+        For each project with an existing filesystem path this method generates README.md and project_status.md content, writes those files into the project's .md/.projects directory, and prints a per-project summary of success or failure. Projects whose paths do not exist are skipped; failures for individual projects are reported but do not stop processing other projects.
+        """
     async def _build_project_documentation(self, force_refresh: bool = False) -> None:
         """Build general project documentation."""
 
@@ -333,6 +381,14 @@ class DocumentationBuilder:
 
         print()
 
+    async def _build_ecosystem_overview(self) -> None:
+        """
+        Generate and save the ApexSigma ecosystem overview and a documentation build summary into the main project's docs directory.
+        
+        Writes two markdown files into the InGest-LLM.as project's .md/.projects directory:
+        - apexsigma_ecosystem_overview.md: the generated ecosystem overview content.
+        - documentation_build_summary.md: a build summary of the documentation run.
+        """
     async def _build_ecosystem_overview(self, force_refresh: bool = False) -> None:
         """Build ecosystem-wide overview documentation."""
 
@@ -369,7 +425,14 @@ class DocumentationBuilder:
         print()
 
     async def _generate_ecosystem_context_bullet(self) -> str:
-        """Generate ecosystem-wide context bullet."""
+        """
+        Generate an ecosystem-wide context bullet as a Markdown string.
+        
+        If generation fails, prints a warning and returns a fallback Markdown string containing a timestamp and an error note.
+        
+        Returns:
+            markdown (str): Ecosystem-wide context bullet formatted as Markdown.
+        """
 
         try:
             return self.context_generator.generate_context_bullet()
@@ -380,7 +443,15 @@ class DocumentationBuilder:
     async def _generate_project_context_bullet(
         self, project_name: str, docs_dir: Path
     ) -> None:
-        """Generate context bullet for a specific project."""
+        """
+        Generate and write the context bullet for a single project.
+        
+        Writes a `context_bullet.md` file into the provided `docs_dir` containing the context bullet produced by the builder's ContextBulletGenerator. On failure, prints a warning including the project name.
+        
+        Parameters:
+            project_name (str): Name of the project (used for contextual logging).
+            docs_dir (Path): Directory where `context_bullet.md` will be created or updated.
+        """
 
         try:
             context_content = self.context_generator.generate_context_bullet()
@@ -392,7 +463,19 @@ class DocumentationBuilder:
     def _format_embedding_analysis(
         self, project_name: str, analysis, all_analyses: dict
     ) -> str:
-        """Format embedding analysis for a project."""
+        """
+        Create a markdown-formatted embedding analysis report for a project.
+        
+        Produces a markdown string that includes a generated timestamp, project overview (description and architecture), a bulleted list of core components, API patterns, and similarity scores to other projects.
+        
+        Parameters:
+            project_name (str): The name or identifier of the project.
+            analysis: An analysis object containing project fields used in the report (expected attributes: `description`, `architecture_type`, `core_components` (iterable of dicts with `name` and `description`), `api_patterns` (iterable of strings), and `similarity_scores` (mapping of other project names to numeric scores)).
+            all_analyses (dict): Mapping of project names to their analysis objects; provided for context or cross-reference (may be unused by the formatter).
+        
+        Returns:
+            markdown (str): The complete embedding analysis formatted as a Markdown document.
+        """
 
         content = f"""# {project_name} - Embedding Analysis
 
@@ -423,7 +506,14 @@ class DocumentationBuilder:
     async def _generate_project_readme_content(
         self, project_name: str, project_path: Path
     ) -> str:
-        """Generate README content for a project."""
+        """
+        Create the README.md content for the specified project.
+        
+        The returned markdown includes a generation timestamp, a short overview, a list of generated documentation files, the project's filesystem path, and a last-updated timestamp.
+        
+        Returns:
+            str: Markdown-formatted README content for the project.
+        """
 
         return f"""# {project_name} - Documentation
 
@@ -458,7 +548,14 @@ This directory contains automatically generated documentation for the {project_n
     async def _generate_project_status_content(
         self, project_name: str, project_path: Path
     ) -> str:
-        """Generate project status content."""
+        """
+        Create a markdown project status report for the given project.
+        
+        The returned markdown includes generation timestamp, counts of Python and Markdown files, a project existence indicator, a canonical directory-structure sample, and a brief development status summary.
+        
+        Returns:
+            str: Markdown-formatted project status containing file counts, existence flag, directory structure, and generated timestamp.
+        """
 
         # Count files
         python_files = (
@@ -502,7 +599,12 @@ This directory contains automatically generated documentation for the {project_n
 """
 
     async def _generate_ecosystem_overview_content(self) -> str:
-        """Generate ecosystem overview content."""
+        """
+        Generate a Markdown overview describing the ApexSigma ecosystem.
+        
+        Returns:
+            overview_md (str): Formatted Markdown containing the ecosystem architecture, core project list and status, integration flow diagram, documentation system notes, development workflow, and a generation timestamp.
+        """
 
         existing_projects = [
             name for name, path in self.projects.items() if path.exists()
@@ -565,7 +667,12 @@ graph TD
 """
 
     def _generate_build_summary(self) -> str:
-        """Generate build summary."""
+        """
+        Generate a markdown summary of the most recent documentation build.
+        
+        Returns:
+            str: Markdown-formatted build summary including generation timestamp, processed projects and their statuses, which documentation components were produced (embedding analysis is indicated as skipped when the analyzer is unavailable), tools used, and next-build instructions.
+        """
 
         return f"""# Documentation Build Summary
 
@@ -604,7 +711,11 @@ python scripts/build_docs.py --all
 
 
 async def main():
-    """Main entry point."""
+    """
+    Entry point for the CLI that builds automated documentation for ApexSigma projects.
+    
+    Parses command-line arguments and runs one of three modes: generate only context bullets (--context-only), build documentation for a specific project (--project PROJECT_NAME), or build documentation for all projects (--all). Supports flags to skip embedding analysis (--no-embeddings), skip context generation (--no-context), and force refresh (--force). Validates that a mode is specified (prints help and exits non-zero on failure), invokes DocumentationBuilder to perform the requested work, and exits non-zero if the build fails.
+    """
 
     parser = argparse.ArgumentParser(
         description="Build automated documentation for ApexSigma projects",
