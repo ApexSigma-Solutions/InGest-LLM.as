@@ -16,6 +16,8 @@ from ingest_llm_as.models import (
     RepositoryIngestionRequest,
     RepositorySource,
     IngestionMetadata,
+    ContentType,
+    SourceType,
 )
 
 
@@ -35,7 +37,11 @@ async def analyze_current_repository():
         repository_source=RepositorySource.LOCAL_PATH,
         source_path=".",
         metadata=IngestionMetadata(
-            source="self_analysis",
+            source=SourceType.MANUAL,
+            content_type=ContentType.CODE,
+            source_url=None,
+            author=None,
+            title="Repository Self-Analysis",
             tags=["ingest_llm_as", "self_report", "repository_analysis"],
             custom_fields={"analysis_type": "self_repository_report"},
         ),
@@ -92,8 +98,8 @@ async def analyze_current_repository():
         print(f"Total Time: {response.total_time_ms}ms")
         print()
 
-        if response.processing_summary:
-            summary = response.processing_summary
+        summary = response.processing_summary
+        if summary:
 
             print("🔬 PROCESSING SUMMARY")
             print("-" * 30)
@@ -102,7 +108,7 @@ async def analyze_current_repository():
             print(f"Embeddings Generated: {summary.total_embeddings_generated}")
             print(f"Average Complexity: {summary.average_complexity:.2f}")
             print(
-                f"Processing Efficiency: {summary.total_elements_extracted / max(1, response.processing_time_ms) * 1000:.1f} elements/sec"
+                f"Processing Efficiency: {summary.total_elements_extracted / max(1, response.processing_time_ms or 1) * 1000:.1f} elements/sec"
             )
             print()
 
@@ -176,13 +182,14 @@ async def analyze_current_repository():
 
         # Calculate some insights
         total_size = sum(f.file_size for f in successful_files)
-        print(f"Total Code Size: {total_size / 1024:.1f} KB")
+        print(f"Total Code Size: {total_size / (1024*1024):.1f} MB")
 
         if python_files:
             print(f"Average File Size: {total_size / len(python_files) / 1024:.1f} KB")
 
         # Check for test coverage
         test_files = [f for f in successful_files if "test" in f.relative_path.lower()]
+        test_coverage = 0.0
         if python_files:
             test_coverage = len(test_files) / len(python_files) * 100
             print(
