@@ -94,7 +94,7 @@ async def ingest_python_repository(
                 "max_files": request.max_files,
                 "max_file_size": request.max_file_size,
                 "include_patterns": request.include_patterns,
-                "exclude_patterns": request.exclude_patterns[:3],  # First 3 for brevity
+                "exclude_patterns": (request.exclude_patterns or [])[:3],  # First 3 for brevity
                 "process_async": request.process_async,
             },
         )

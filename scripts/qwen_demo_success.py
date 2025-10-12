@@ -109,8 +109,14 @@ Respond in 3-4 sentences focusing on the key integration patterns."""
 
             if response.status_code == 200:
                 result = response.json()
-                ai_analysis = result["choices"][0]["message"]["content"]
-                reasoning = result["choices"][0]["message"].get("reasoning_content", "")
+                choices = result.get("choices", [])
+                if choices and len(choices) > 0:
+                    message = choices[0].get("message", {})
+                    ai_analysis = message.get("content", "")
+                    reasoning = message.get("reasoning_content", "")
+                else:
+                    ai_analysis = ""
+                    reasoning = ""
 
                 print("✅ Analysis completed!")
                 print()
@@ -152,7 +158,14 @@ Identify the pattern in 2 sentences."""
 
             if response.status_code == 200:
                 result = response.json()
-                architecture_analysis = result["choices"][0]["message"]["content"]
+                choices = result.get("choices", [])
+                if choices and len(choices) > 0:
+                    message = choices[0].get("message", {})
+                    architecture_analysis = message.get("content", "")
+                    reasoning = message.get("reasoning_content", "")
+                else:
+                    architecture_analysis = ""
+                    reasoning = ""
 
                 print("✅ Architecture analysis completed!")
                 print()
@@ -161,9 +174,6 @@ Identify the pattern in 2 sentences."""
                 if architecture_analysis:
                     print(architecture_analysis)
                 else:
-                    reasoning = result["choices"][0]["message"].get(
-                        "reasoning_content", ""
-                    )
                     print(
                         "Reasoning:",
                         reasoning[:150] + "..." if len(reasoning) > 150 else reasoning,

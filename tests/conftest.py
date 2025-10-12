@@ -16,11 +16,11 @@ from pathlib import Path
 
 # Import service modules for testing
 try:
-    from app.main import app
-    from app.core.config import Settings
-    from app.services.llm_service import LLMService
-    from app.services.embedding_service import EmbeddingService
-    from app.services.vector_store import VectorStoreService
+    from src.ingest_llm_as.main import app
+    from src.ingest_llm_as.config import Settings
+    from src.ingest_llm_as.services.llm_cache import LLMCache
+    from src.ingest_llm_as.services.vectorizer import LMStudioVectorizer
+    from src.ingest_llm_as.services.repository_processor import RepositoryProcessor
 except ImportError:
     # Handle case where modules aren't available during test discovery
     app = None

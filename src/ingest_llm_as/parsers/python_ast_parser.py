@@ -303,7 +303,7 @@ class ASTVisitor(ast.NodeVisitor):
         if self.current_class:
             qualified_name = f"{self.current_class}.{node.name}"
             # Determine method type
-            if self.current_class and self._is_method(node):
+            if self.current_class and self._is_method():
                 if element_type == CodeElementType.FUNCTION:
                     element_type = self._determine_method_type(node)
                 else:
@@ -460,7 +460,7 @@ class ASTVisitor(ast.NodeVisitor):
 
         return signature
 
-    def _is_method(self, node: ast.FunctionDef) -> bool:
+    def _is_method(self) -> bool:
         """Check if function is a method."""
         return self.current_class is not None
 

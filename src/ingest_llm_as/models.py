@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 
 class ContentType(str, Enum):
@@ -64,6 +64,8 @@ class IngestionMetadata(BaseModel):
         Returns:
             list[str]: A list of cleaned, non-empty tag strings.
         """
+    def validate_tags(cls, v: List[str]) -> List[str]:
+        """Ensure tags are non-empty strings."""
         return [tag.strip() for tag in v if tag and tag.strip()]
 
 
@@ -96,6 +98,8 @@ class IngestionRequest(BaseModel):
         Raises:
             ValueError: If the trimmed content is empty.
         """
+    def validate_content(cls, v: str) -> str:
+        """Ensure content is not empty after stripping."""
         stripped = v.strip()
         if not stripped:
             raise ValueError("Content cannot be empty or whitespace only")
@@ -287,6 +291,9 @@ class RepositoryIngestionRequest(BaseModel):
             ValueError: If `repository_source` is `RepositorySource.LOCAL_PATH` and `v` does not exist or is not a directory, or if `repository_source` is a URL type and `v` does not start with `http://`, `https://`, or `git://`.
         """
         repository_source = values.data.get("repository_source")
+    def validate_source_path(cls, v: str, info: ValidationInfo) -> str:
+        """Validate the source path based on repository source."""
+        repository_source = info.data.get("repository_source")
 
         if repository_source == RepositorySource.LOCAL_PATH:
             # Validate local path exists
@@ -320,6 +327,8 @@ class RepositoryIngestionRequest(BaseModel):
         Raises:
             ValueError: If `v` is empty or falsy.
         """
+    def validate_include_patterns(cls, v: List[str]) -> List[str]:
+        """Ensure at least one include pattern."""
         if not v:
             raise ValueError("At least one include pattern is required")
         return v

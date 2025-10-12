@@ -18,7 +18,7 @@ import httpx
 @pytest.fixture(scope="session")
 def e2e_settings():
     """Provide end-to-end test settings."""
-    from app.core.config import Settings
+    from src.ingest_llm_as.config import Settings
     settings = Settings()
     # Use test database and services
     settings.database_url = "postgresql://test:test@localhost:5433/e2e_db"
@@ -32,23 +32,22 @@ def e2e_settings():
 @pytest.fixture(scope="session")
 async def e2e_app(e2e_settings):
     """Create FastAPI test application."""
-    from app.main import create_application
-    app = create_application()
+    from src.ingest_llm_as.main import app
 
     # Override settings for E2E tests
-    from app.core.config import get_settings
+    from src.ingest_llm_as.config import get_settings
     original_get_settings = get_settings
 
     def mock_get_settings():
         return e2e_settings
 
-    import app.core.config
-    app.core.config.get_settings = mock_get_settings
+    import src.ingest_llm_as.config as config_module
+    config_module.get_settings = mock_get_settings
 
     yield app
 
     # Restore original settings
-    app.core.config.get_settings = original_get_settings
+    config_module.get_settings = original_get_settings
 
 
 @pytest.fixture(scope="session")

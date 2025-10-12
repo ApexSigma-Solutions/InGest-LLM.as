@@ -16,7 +16,7 @@ from .metrics import setup_metrics, init_service_metrics
 from .tracing import setup_tracing
 from .logging import setup_logging, get_logger
 from .langfuse_client import get_langfuse_client
-from ..config import settings
+from ..config import get_settings
 
 logger = get_logger(__name__)
 
@@ -69,7 +69,7 @@ class ObservabilityManager:
         if self.metrics_enabled:
             self.instrumentator = setup_metrics(app)
             init_service_metrics(
-                version=settings.app_version,
+                version=get_settings().app_version,
                 environment=os.getenv("ENVIRONMENT", "development"),
             )
             logger.info("Prometheus metrics initialized", endpoint="/metrics")

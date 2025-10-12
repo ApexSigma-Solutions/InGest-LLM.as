@@ -61,8 +61,8 @@ class MemOSClient:
         self.timeout = current_settings.memos_timeout
         self.api_key = current_settings.memos_api_key
 
-        # Debug: Print configuration
-        print(f"DEBUG MemOSClient: base_url={self.base_url}, timeout={self.timeout}")
+        # Debug: Log configuration
+        logger.debug(f"MemOSClient initialized: base_url={self.base_url}, timeout={self.timeout}")
 
         # HTTP client configuration
         headers = {
@@ -93,12 +93,11 @@ class MemOSClient:
             True if the memOS.as /health endpoint responds with HTTP 200, False otherwise.
         """
         try:
-            print(f"DEBUG health_check: Making request to {self.base_url}/health")
+            logger.debug(f"health_check: Making request to {self.base_url}/health")
             response = await self.client.get("/health")
-            print(f"DEBUG health_check: Response status {response.status_code}")
+            logger.debug(f"health_check: Response status {response.status_code}")
             return response.status_code == 200
         except Exception as e:
-            print(f"DEBUG health_check: Error {e}")
             logger.warning(f"memOS.as health check failed: {e}")
             return False
 
@@ -254,8 +253,10 @@ async def get_memos_client() -> MemOSClient:
     """
     global _client_instance
     if _client_instance is None:
-        print("DEBUG get_memos_client: Creating new MemOSClient instance")
+        logger.debug("get_memos_client: Creating new MemOSClient instance")
         _client_instance = MemOSClient()
     else:
         print("DEBUG get_memos_client: Using existing MemOSClient instance")
+    return _client_instance
+        logger.debug("get_memos_client: Using existing MemOSClient instance")
     return _client_instance

@@ -11,12 +11,19 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from ingest_llm_as.services.repository_processor import get_repository_processor
-from ingest_llm_as.models import (
-    RepositoryIngestionRequest,
-    RepositorySource,
-    IngestionMetadata,
-)
+try:
+    from ingest_llm_as.services.repository_processor import get_repository_processor
+    from ingest_llm_as.models import (
+        RepositoryIngestionRequest,
+        RepositorySource,
+        IngestionMetadata,
+        ContentType,
+        SourceType,
+    )
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 
 async def analyze_current_repository():
@@ -39,7 +46,11 @@ async def analyze_current_repository():
         repository_source=RepositorySource.LOCAL_PATH,
         source_path=".",
         metadata=IngestionMetadata(
-            source="self_analysis",
+            source=SourceType.MANUAL,
+            content_type=ContentType.CODE,
+            source_url=None,
+            author=None,
+            title="Repository Self-Analysis",
             tags=["ingest_llm_as", "self_report", "repository_analysis"],
             custom_fields={"analysis_type": "self_repository_report"},
         ),
@@ -96,8 +107,8 @@ async def analyze_current_repository():
         print(f"Total Time: {response.total_time_ms}ms")
         print()
 
-        if response.processing_summary:
-            summary = response.processing_summary
+        summary = response.processing_summary
+        if summary:
 
             print("🔬 PROCESSING SUMMARY")
             print("-" * 30)
@@ -106,7 +117,7 @@ async def analyze_current_repository():
             print(f"Embeddings Generated: {summary.total_embeddings_generated}")
             print(f"Average Complexity: {summary.average_complexity:.2f}")
             print(
-                f"Processing Efficiency: {summary.total_elements_extracted / max(1, response.processing_time_ms) * 1000:.1f} elements/sec"
+                f"Processing Efficiency: {summary.total_elements_extracted / max(1, response.processing_time_ms or 1) * 1000:.1f} elements/sec"
             )
             print()
 
@@ -162,9 +173,8 @@ async def analyze_current_repository():
         if python_files:
             total_elements = sum(f.elements_extracted for f in python_files)
             total_chunks = sum(f.chunks_created for f in python_files)
-            avg_complexity = sum(
-                f.complexity_score for f in python_files if f.complexity_score
-            ) / len([f for f in python_files if f.complexity_score])
+            scores = [f.complexity_score for f in python_files if f.complexity_score is not None]
+            avg_complexity = sum(scores) / len(scores) if scores else 0.0
 
             print("🐍 PYTHON CODE ANALYSIS")
             print("-" * 30)
@@ -180,13 +190,14 @@ async def analyze_current_repository():
 
         # Calculate some insights
         total_size = sum(f.file_size for f in successful_files)
-        print(f"Total Code Size: {total_size / 1024:.1f} KB")
+        print(f"Total Code Size: {total_size / (1024*1024):.1f} MB")
 
         if python_files:
             print(f"Average File Size: {total_size / len(python_files) / 1024:.1f} KB")
 
         # Check for test coverage
         test_files = [f for f in successful_files if "test" in f.relative_path.lower()]
+        test_coverage = None
         if python_files:
             test_coverage = len(test_files) / len(python_files) * 100
             print(
@@ -203,7 +214,7 @@ async def analyze_current_repository():
         if len(python_files) > 20:
             print("• Consider organizing code into more packages/modules")
 
-        if test_coverage < 50:
+        if test_coverage is not None and test_coverage < 50:
             print("• Consider adding more test coverage")
 
         if any(f.file_size > 50000 for f in successful_files):

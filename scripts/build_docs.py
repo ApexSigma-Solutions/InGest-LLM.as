@@ -9,8 +9,11 @@ using POML templates, embedding analysis, and real-time project data.
 import asyncio
 import argparse
 import sys
+import json
+import os
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Dict
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -24,7 +27,12 @@ except ImportError:
 
 # Import other components we've built
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_context_bullet import ContextBulletGenerator
+try:
+    from generate_context_bullet import ContextBulletGenerator
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure generate_context_bullet.py is available.")
+    sys.exit(1)
 
 
 class DocumentationBuilder:
@@ -46,11 +54,57 @@ class DocumentationBuilder:
             else Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
         )
         self.projects = {
+    def __init__(self, base_path: Optional[str] = None, projects: Optional[Dict[str, str]] = None):
+        """Initialize the documentation builder."""
+        if base_path:
+            self.base_path = Path(base_path)
+        else:
+            # Default to repo root's parent (where sibling projects are located)
+            repo_root = Path(__file__).resolve().parents[1]
+            self.base_path = repo_root.parent
+        
+        # Use provided projects config, load from env/config, or use defaults
+        if projects:
+            self.projects = {name: self.base_path / path for name, path in projects.items()}
+        else:
+            self.projects = self._load_projects_config()
+
+    def _load_projects_config(self) -> Dict[str, Path]:
+        """Load project configuration from environment variables or config file."""
+        projects = {}
+        
+        # Try to load from config file first
+        config_file = Path(__file__).parent / "build_docs_config.json"
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    projects_config = config.get('projects', {})
+                    for name, path in projects_config.items():
+                        projects[name] = self.base_path / path
+                return projects
+            except (json.JSONDecodeError, KeyError):
+                pass  # Fall back to defaults
+        
+        # Try environment variables
+        env_projects = os.environ.get('BUILD_DOCS_PROJECTS')
+        if env_projects:
+            try:
+                projects_config = json.loads(env_projects)
+                for name, path in projects_config.items():
+                    projects[name] = self.base_path / path
+                return projects
+            except json.JSONDecodeError:
+                pass  # Fall back to defaults
+        
+        # Default project configuration
+        projects = {
             "InGest-LLM.as": self.base_path / "InGest-LLM.as",
             "memos.as": self.base_path / "memos.as",
             "devenviro.as": self.base_path / "devenviro.as",
             "tools.as": self.base_path / "tools.as",
         }
+        return projects
 
         # Documentation components
         self.context_generator = ContextBulletGenerator()
@@ -102,18 +156,18 @@ class DocumentationBuilder:
 
         # Generate context bullets
         if include_context_bullets:
-            await self._build_context_bullets()
+            await self._build_context_bullets(force_refresh)
 
         # Generate embedding analysis
         if include_embeddings and EMBEDDING_ANALYZER_AVAILABLE:
-            await self._build_embedding_analysis()
+            await self._build_embedding_analysis(force_refresh)
 
         # Generate project documentation
         if include_project_docs:
-            await self._build_project_documentation()
+            await self._build_project_documentation(force_refresh)
 
         # Generate ecosystem overview
-        await self._build_ecosystem_overview()
+        await self._build_ecosystem_overview(force_refresh)
 
         print("\\n" + "=" * 80)
         print("DOCUMENTATION BUILD COMPLETED")
@@ -163,9 +217,25 @@ class DocumentationBuilder:
         
         Generates an ecosystem-level context bullet and writes it to each project's .md/.projects/context_bullet.md file, reporting per-project success or failure.
         """
+    async def _build_context_bullets(self, force_refresh: bool = False) -> None:
+        """Build context bullets for all projects."""
 
         print("GENERATING CONTEXT BULLETS")
         print("-" * 30)
+
+        # Check for existing context bullets if not force refreshing
+        if not force_refresh:
+            existing_bullets = []
+            for project_name, project_path in self.projects.items():
+                if project_path.exists():
+                    context_file = project_path / ".md" / ".projects" / "context_bullet.md"
+                    if context_file.exists():
+                        existing_bullets.append(project_name)
+
+            if existing_bullets:
+                print(f"Warning: Context bullets already exist for {len(existing_bullets)} projects: {', '.join(existing_bullets[:5])}{'...' if len(existing_bullets) > 5 else ''}")
+                print("Use --force to regenerate existing documentation")
+                return
 
         # Generate ecosystem-wide context bullet
         ecosystem_context = await self._generate_ecosystem_context_bullet()
@@ -196,6 +266,8 @@ class DocumentationBuilder:
         writing files. Exceptions encountered during generation or file writes are
         caught and printed; they are not re-raised.
         """
+    async def _build_embedding_analysis(self, force_refresh: bool = False) -> None:
+        """Build embedding analysis documentation."""
 
         print("GENERATING EMBEDDING ANALYSIS")
         print("-" * 35)
@@ -203,6 +275,20 @@ class DocumentationBuilder:
         if not self.embedding_analyzer:
             print("⚠ Embedding analyzer not available")
             return
+
+        # Check for existing embedding analyses if not force refreshing
+        if not force_refresh:
+            existing_analyses = []
+            for project_name, project_path in self.projects.items():
+                if project_path.exists():
+                    analysis_file = project_path / ".md" / ".projects" / "embedding_analysis.md"
+                    if analysis_file.exists():
+                        existing_analyses.append(project_name)
+
+            if existing_analyses:
+                print(f"Warning: Embedding analyses already exist for {len(existing_analyses)} projects: {', '.join(existing_analyses[:5])}{'...' if len(existing_analyses) > 5 else ''}")
+                print("Use --force to regenerate existing documentation")
+                return
 
         try:
             # Generate embedding analysis for all projects
@@ -248,9 +334,26 @@ class DocumentationBuilder:
         
         For each project with an existing filesystem path this method generates README.md and project_status.md content, writes those files into the project's .md/.projects directory, and prints a per-project summary of success or failure. Projects whose paths do not exist are skipped; failures for individual projects are reported but do not stop processing other projects.
         """
+    async def _build_project_documentation(self, force_refresh: bool = False) -> None:
+        """Build general project documentation."""
 
         print("GENERATING PROJECT DOCUMENTATION")
         print("-" * 40)
+
+        # Check for existing project docs if not force refreshing
+        if not force_refresh:
+            existing_docs = []
+            for project_name, project_path in self.projects.items():
+                if project_path.exists():
+                    readme_file = project_path / ".md" / ".projects" / "README.md"
+                    status_file = project_path / ".md" / ".projects" / "project_status.md"
+                    if readme_file.exists() or status_file.exists():
+                        existing_docs.append(project_name)
+
+            if existing_docs:
+                print(f"Warning: Project documentation already exists for {len(existing_docs)} projects: {', '.join(existing_docs[:5])}{'...' if len(existing_docs) > 5 else ''}")
+                print("Use --force to regenerate existing documentation")
+                return
 
         for project_name, project_path in self.projects.items():
             if project_path.exists():
@@ -286,24 +389,32 @@ class DocumentationBuilder:
         - apexsigma_ecosystem_overview.md: the generated ecosystem overview content.
         - documentation_build_summary.md: a build summary of the documentation run.
         """
+    async def _build_ecosystem_overview(self, force_refresh: bool = False) -> None:
+        """Build ecosystem-wide overview documentation."""
 
         print("GENERATING ECOSYSTEM OVERVIEW")
         print("-" * 35)
 
         try:
+            # Check if ecosystem overview files already exist
+            main_docs_dir = self.projects["InGest-LLM.as"] / ".md" / ".projects"
+            overview_file = main_docs_dir / "apexsigma_ecosystem_overview.md"
+            summary_file = main_docs_dir / "documentation_build_summary.md"
+
+            if not force_refresh and overview_file.exists() and summary_file.exists():
+                print("✓ Ecosystem overview files already exist (use --force to regenerate)")
+                return
+
             # Generate ecosystem overview
             overview_content = await self._generate_ecosystem_overview_content()
 
             # Save to main project
-            main_docs_dir = self.projects["InGest-LLM.as"] / ".md" / ".projects"
-            overview_file = main_docs_dir / "apexsigma_ecosystem_overview.md"
             overview_file.write_text(overview_content, encoding="utf-8")
 
             print("✓ apexsigma_ecosystem_overview.md")
 
             # Generate build summary
             summary_content = self._generate_build_summary()
-            summary_file = main_docs_dir / "documentation_build_summary.md"
             summary_file.write_text(summary_content, encoding="utf-8")
 
             print("✓ documentation_build_summary.md")
@@ -615,6 +726,8 @@ Examples:
   python build_docs.py --project InGest-LLM.as  # Build specific project
   python build_docs.py --context-only           # Only context bullets
   python build_docs.py --no-embeddings          # Skip embedding analysis
+  python build_docs.py --config custom_config.json  # Use custom project config
+  python build_docs.py --base-path /custom/path     # Use custom base path
         """,
     )
 
@@ -637,11 +750,15 @@ Examples:
     )
 
     parser.add_argument(
-        "--no-context", action="store_true", help="Skip context bullet generation"
+        "--config",
+        metavar="CONFIG_FILE",
+        help="Path to JSON config file for project paths",
     )
 
     parser.add_argument(
-        "--force", action="store_true", help="Force refresh all documentation"
+        "--base-path",
+        metavar="BASE_PATH",
+        help="Base path for projects (defaults to repo parent)",
     )
 
     args = parser.parse_args()
@@ -652,8 +769,24 @@ Examples:
         print("\\nError: Must specify --all, --project PROJECT_NAME, or --context-only")
         sys.exit(1)
 
+    # Load projects config if specified
+    projects_config = None
+    if args.config:
+        config_path = Path(args.config)
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    projects_config = config.get('projects', {})
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Error loading config file {args.config}: {e}")
+                sys.exit(1)
+        else:
+            print(f"Config file not found: {args.config}")
+            sys.exit(1)
+
     # Create builder
-    builder = DocumentationBuilder()
+    builder = DocumentationBuilder(base_path=args.base_path, projects=projects_config)
 
     try:
         if args.context_only:

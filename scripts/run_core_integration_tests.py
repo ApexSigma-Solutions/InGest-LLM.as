@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any
 import httpx
 
 # Service Configuration
@@ -46,6 +46,8 @@ class CoreIntegrationTestRunner:
                 - {"status": "unhealthy", "service": service_name, "code": <HTTP status code>}
                 - {"status": "unreachable", "service": service_name, "error": <error message>}
         """
+    async def check_service_health(self, url: str, service_name: str) -> Dict[str, Any]:
+        """Check if a service is healthy."""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(f"{url}/health")
@@ -119,8 +121,19 @@ class CoreIntegrationTestRunner:
         print(f"🚀 Running command: {' '.join(cmd)}")
         print()
 
-        result = subprocess.run(cmd, cwd=self.project_root)
-        return result.returncode == 0
+        try:
+            result = subprocess.run(cmd, cwd=self.project_root, capture_output=True, text=True)
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print("STDERR:", result.stderr)
+            return result.returncode == 0
+        except FileNotFoundError:
+            print("❌ pytest not found. Please install pytest: pip install pytest")
+            return False
+        except Exception as e:
+            print(f"❌ Failed to run tests: {e}")
+            return False
 
     async def run_core_integration_tests(self) -> bool:
         """

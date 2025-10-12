@@ -11,7 +11,7 @@ import time
 from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime
 
-from ..config import settings
+from ..config import get_settings
 from ..services.vectorizer import generate_content_embedding
 from ..parsers.python_ast_parser import PythonASTParser
 from ..observability.langfuse_client import get_langfuse_client
@@ -35,13 +35,13 @@ class ContentProcessor:
             chunk_size: Maximum size for content chunks
             enable_embeddings: Whether to generate embeddings for content
         """
-        self.chunk_size = chunk_size or settings.default_chunk_size
+        self.chunk_size = chunk_size or get_settings().default_chunk_size
         self.max_chunk_size = 10000  # Hard limit
         self.min_chunk_size = 100  # Minimum viable chunk
         self.enable_embeddings = (
             enable_embeddings
             if enable_embeddings is not None
-            else settings.embedding_enabled
+            else get_settings().embedding_enabled
         )
 
     def clean_content(self, content: str) -> str:
@@ -98,9 +98,9 @@ class ContentProcessor:
                 chunks.append(chunk.strip())
 
             # Safety check to prevent infinite loops
-            if len(chunks) > settings.max_chunks_per_request:
+            if len(chunks) > get_settings().max_chunks_per_request:
                 logger.warning(
-                    f"Hit max chunks limit ({settings.max_chunks_per_request})"
+                    f"Hit max chunks limit ({get_settings().max_chunks_per_request})"
                 )
                 break
 
@@ -254,7 +254,7 @@ class ContentProcessor:
         Returns:
             List[Optional[List[float]]]: Embeddings for each chunk (None if generation fails)
         """
-        if not self.enable_embeddings or not settings.lm_studio_enabled:
+        if not self.enable_embeddings or not get_settings().lm_studio_enabled:
             logger.debug("Embedding generation disabled, returning None embeddings")
             return [None] * len(chunks)
 
@@ -815,7 +815,7 @@ def create_ingestion_metadata(
         "processor_version": "1.0.0",
         # Service metadata
         "ingested_by": "InGest-LLM.as",
-        "service_version": settings.app_version,
+        "service_version": get_settings().app_version,
     }
 
     # Add processing info if provided

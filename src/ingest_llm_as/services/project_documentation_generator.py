@@ -10,12 +10,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from pydantic_settings import BaseSettings
+
 from .project_analyzer import (
     get_qwen_project_analyzer,
     ProjectOutline,
     ServiceRelationship,
 )
 from ..observability.logging import get_logger
+
+
+class ProjectDocumentationGeneratorSettings(BaseSettings):
+    """Settings for ProjectDocumentationGenerator."""
+    projects_base_path: Path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+
+    class Config:
+        env_prefix = "PROJECT_"
+
 
 logger = get_logger(__name__)
 
@@ -42,7 +53,8 @@ class ProjectDocumentationGenerator:
         self.analyzer = get_qwen_project_analyzer()
 
         # ApexSigma project paths
-        self.base_path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+        settings = ProjectDocumentationGeneratorSettings()
+        self.base_path = settings.projects_base_path
         self.projects = {
             "InGest-LLM.as": self.base_path / "InGest-LLM.as",
             "memos.as": self.base_path / "memos.as",

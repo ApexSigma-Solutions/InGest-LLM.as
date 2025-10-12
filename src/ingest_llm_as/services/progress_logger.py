@@ -287,7 +287,7 @@ class ProgressLogger:
                 "files_discovered": response.files_discovered,
                 "files_processed": len(response.files_processed),
                 "summary": (
-                    asdict(response.processing_summary)
+                    response.processing_summary.model_dump()
                     if response.processing_summary
                     else None
                 ),

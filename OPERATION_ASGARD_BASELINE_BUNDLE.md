@@ -23,7 +23,7 @@ This baseline bundle captures the complete state of the InGest-LLM.as microservi
 - **Git Repository**: Active with complete history
 
 ### Directory Hierarchy
-```
+```text
 InGest-LLM.as/
 ├── src/ingest_llm_as/                    # Core source code (33 modules)
 │   ├── api/                              # API endpoints (7 modules)
@@ -151,8 +151,10 @@ PROMETHEUS_URL="http://prometheus:9090"
 JAEGER_ENDPOINT="http://jaeger:14268"
 GRAFANA_URL="http://grafana:3001"
 LANGFUSE_HOST="https://cloud.langfuse.com"
-LANGFUSE_PUBLIC_KEY="pk-lf-f58be3ee-e274-4bf1-8ffe-4df7e9fcf61e"
-LANGFUSE_SECRET_KEY="sk-lf-1d26cfb7-fcaf-4fdf-830e-a9ae4d32d7fa"
+LANGFUSE_PUBLIC_KEY="<REDACTED>"
+LANGFUSE_SECRET_KEY="<REDACTED>"
+
+**Note**: Actual Langfuse credentials must be stored in a .env file and never committed to version control.
 ```
 
 ### Processing Configuration
@@ -218,7 +220,7 @@ Key models defined in `src/ingest_llm_as/models.py`:
 - **Tracing**: Jaeger distributed tracing enabled
 - **Logging**: Structured logging with Loki
 - **LLM Observability**: Langfuse integration operational
-- **Grafana Dashboards**: Available at http://localhost:8080
+- **Grafana Dashboards**: Available at <http://localhost:8080>
 
 ---
 
@@ -290,9 +292,9 @@ Key models defined in `src/ingest_llm_as/models.py`:
 ## 8. Integration Points
 
 ### Upstream Dependencies
-- **memOS.as**: Primary memory storage system (http://memos:8090)
-- **tools.as**: Development utilities registry (http://tools:8003)
-- **agent-bridge**: Agent communication layer (http://agent-bridge:8100)
+- **memOS.as**: Primary memory storage system (<http://memos:8090>)
+- **tools.as**: Development utilities registry (<http://tools:8003>)
+- **agent-bridge**: Agent communication layer (<http://agent-bridge:8100>)
 
 ### Database Integrations
 - **PostgreSQL**: Persistent storage via memOS.as
@@ -301,7 +303,7 @@ Key models defined in `src/ingest_llm_as/models.py`:
 - **Neo4j**: Knowledge graph relationships
 
 ### External Services
-- **LM Studio**: Local embedding generation (http://localhost:1234/v1)
+- **LM Studio**: Local embedding generation (<http://localhost:1234/v1>)
 - **OpenAI API**: Fallback LLM services
 - **Langfuse**: LLM observability and monitoring
 - **Prometheus**: Metrics collection

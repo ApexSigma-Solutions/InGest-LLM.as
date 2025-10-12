@@ -1,15 +1,53 @@
-# keploy-ingest-llm.yml
-version: api/v1beta1
-kind: config
-metadata:
-  name: keploy-ingest-llm-config
-spec:
-  path: "./ingest-llm-tests"
-  command: "python -m uvicorn services.ingest_llm.as.app.main:app --host 0.0.0.0 --port 8000"
-  network:
-    filterNoise: true
-    delay: 10
-  test:
-    path: "./ingest-llm-tests/tests"
-    command: "python -m pytest ingest-llm-tests/ -v"
-    delay: 5
+name: Keploy InGest-LLM Tests
+
+on:
+  push:
+    branches:
+      - main
+      - alpha
+  pull_request:
+    branches:
+      - main
+      - alpha
+
+jobs:
+  keploy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Install Keploy
+        run: |
+          curl -LO https://github.com/keploy/keploy/releases/latest/download/keploy_linux_amd64.tar.gz
+          tar -xzf keploy_linux_amd64.tar.gz
+          sudo mv keploy /usr/local/bin/keploy
+
+      - name: Start application with Keploy
+        run: |
+          keploy record -c "poetry run uvicorn src.ingest_llm_as.main:app --host 0.0.0.0 --port 8000" --containerName ingest-llm-app --delay 10
+
+      - name: Run tests with Keploy
+        run: |
+          keploy test -c "poetry run python -m pytest tests/ -v" --delay 5
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: keploy-test-results
+          path: |
+            keploy-reports/
+            keploy-tests/

@@ -27,7 +27,7 @@ def docker_client():
 @pytest.fixture(scope="session")
 def integration_settings():
     """Provide integration test settings."""
-    from app.core.config import Settings
+    from src.ingest_llm_as.config import Settings
     settings = Settings()
     # Override with test-specific settings
     settings.database_url = "postgresql://test:test@localhost:5433/test_db"

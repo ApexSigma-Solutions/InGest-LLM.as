@@ -6,16 +6,29 @@ Enhanced to process comprehensive POML historical datasets including
 ecosystem state, knowledge base, chronology, and relational graphs.
 """
 
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from ..observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class OmegaIngestGuardianSettings(BaseSettings):
+    """Settings for OmegaIngestGuardian."""
+
+    projects_base_path: Path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+
+    model_config = SettingsConfigDict(
+        env_prefix="OMEGA_",
+        extra="ignore",
+    )
 
 
 @dataclass
@@ -78,11 +91,12 @@ class OmegaIngestGuardian:
             historical_poml: Placeholder for an ingested POML dataset, initialized to None.
         """
         self.base_path = Path(base_path)
+    def __init__(self, base_path: Optional[str] = None):
+        """Initialize the Omega Ingest Guardian."""
+        settings = OmegaIngestGuardianSettings()
+        self.base_path = settings.projects_base_path if base_path is None else Path(base_path)
         self.logger = get_logger(__name__)
         self.version = "8.0"
-
-        # Historical POML dataset for processing
-        self.historical_poml = None
 
     def ingest_poml_dataset(self, poml_data: str) -> dict[str, Any]:
         """
@@ -104,34 +118,36 @@ class OmegaIngestGuardian:
             # Parse the POML XML structure
             root = ET.fromstring(f"<root>{poml_data}</root>")
 
-            entities = []
-            relationships = []
-            events = []
+            entities: list[POMLEntity] = []
+            relationships: list[dict[str, Any]] = []
+            events: list[dict[str, Any]] = []
 
             # Process Projects
             projects = root.find(".//Projects")
             if projects:
                 for project in projects.findall("Project"):
-                    entities.append(
-                        POMLEntity(
-                            entity_id=project.get("id"),
-                            entity_type="project",
-                            name=project.find("Name").text,
-                            description=project.find("Description").text,
-                            status=project.find("Status").text,
-                            metadata={
-                                "vision": (
-                                    project.find("Vision").text
-                                    if project.find("Vision") is not None
-                                    else None
-                                ),
-                                "architecture": (
-                                    project.find("Architecture").attrib
-                                    if project.find("Architecture") is not None
-                                    else {}
-                                ),
-                            },
-                            timestamp=datetime.now(timezone.utc).isoformat(),
+                    entity_id = project.get("id")
+                    if entity_id:
+                        entities.append(
+                            POMLEntity(
+                                entity_id=entity_id,
+                                entity_type="project",
+                                name=project.findtext("Name") or "",
+                                description=project.findtext("Description") or "",
+                                status=project.findtext("Status") or "",
+                                metadata={
+                                    "vision": (
+                                        project.findtext("Vision")
+                                        if project.find("Vision") is not None
+                                        else None
+                                    ),
+                                    "architecture": (
+                                        project.find("Architecture").attrib
+                                        if project.find("Architecture") is not None
+                                        else {}
+                                    ),
+                                },
+                                timestamp=datetime.now(timezone.utc).isoformat(),
                             relationships=[],
                         )
                     )
@@ -149,8 +165,8 @@ class OmegaIngestGuardian:
                 },
             }
 
-        except ET.ParseError as e:
-            self.logger.error(f"Failed to parse POML data: {str(e)}")
+        except ET.ParseError:
+            self.logger.exception("Failed to parse POML data")
             return {
                 "entities": [],
                 "relationships": [],
@@ -176,6 +192,9 @@ class OmegaIngestGuardian:
         
         Returns:
             OmegaIngestSnapshot: A snapshot of the Master Knowledge Graph containing snapshot metadata (id, timestamp, version), aggregated counts (entities, relationships, decisions), domain and semantic summaries, health metrics, and historical context derived from any integrated POML dataset.
+        Execute comprehensive Omega Ingest with POML historical dataset integration.
+
+        Note: scope, preserve_historical, and generate_poml are reserved for future enhancement.
         """
         snapshot_id = str(uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()

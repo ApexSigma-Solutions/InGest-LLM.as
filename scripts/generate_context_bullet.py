@@ -98,10 +98,17 @@ class ContextBulletGenerator:
         # Load data
         context_data = self._load_context_data(data_source)
 
-        if POML_AVAILABLE:
-            content = self._generate_with_poml(context_data)
-        else:
-            content = self._generate_fallback(context_data)
+        # Generate content based on format_type
+        if format_type == "json":
+            import json
+            content = json.dumps(context_data, indent=2)
+        elif format_type == "text":
+            content = self._generate_text(context_data)
+        else:  # markdown or poml
+            if POML_AVAILABLE:
+                content = self._generate_with_poml(context_data)
+            else:
+                content = self._generate_fallback(context_data)
 
         # Save output
         if output_file:
@@ -369,6 +376,73 @@ class ContextBulletGenerator:
         
         Prints each template name (with a .poml suffix) to stdout and, when a template exposes a `metadata` mapping, prints its `description` or "No description". If no templates are loaded, prints "No templates found". Finally prints the total template count.
         """
+    def _generate_text(self, data: Dict[str, Any]) -> str:
+        """Generate context using plain text formatting."""
+
+        content = f"""ApexSigma Agent Context Bullet
+
+Generated: {data.get('timestamp', datetime.now().isoformat())}
+Session ID: {data.get('session_id', 'FALLBACK')}
+Version: {data.get('version', '1.0')}
+
+---
+
+Mission Brief
+
+Objective: {data.get('mission_brief', {}).get('objective', 'Continue ApexSigma development')}
+
+Agent Roster:
+"""
+
+        agent_roster = data.get("mission_brief", {}).get("agent_roster", {})
+        for role, agents in agent_roster.items():
+            if isinstance(agents, list):
+                agents_str = ", ".join(agents)
+            else:
+                agents_str = str(agents)
+            content += f"- {role.title()}: {agents_str}\n"
+
+        content += "\n---\n\nProject Status\n\n"
+
+        for project in data.get("project_status", []):
+            content += f"{project.get('name', 'Unknown Project')}\n"
+            content += f"Status: {project.get('status', 'Unknown')}\n"
+            content += f"Details: {project.get('details', 'No details available.')}\n\n"
+
+        # Critical blocker
+        blocker = data.get("critical_blocker")
+        if blocker:
+            content += "---\n\nCritical Blocker\n\n"
+            content += f"Issue: {blocker.get('issue', 'Unknown issue')}\n"
+            content += f"Impact: {blocker.get('impact', 'Unknown impact')}\n"
+            content += f"Status: {blocker.get('status', 'Unknown status')}\n\n"
+
+        # Priorities
+        content += "---\n\nImmediate Priorities\n\n"
+
+        for task in data.get("immediate_priorities", []):
+            content += f"{task.get('priority', 'UNKNOWN')}: {task.get('task', 'Unknown Task')}\n"
+            if task.get("project"):
+                content += f"Project: {task['project']}\n"
+            content += f"Description: {task.get('description', 'No description available.')}\n\n"
+
+        # Development context
+        content += (
+            "---\n\nDevelopment Context\n\n"
+            f"Environment: {data.get('environment', 'Local Development')}\n"
+            f"Tools Active: {', '.join(data.get('active_tools', []))}\n"
+            f"Network Status: {data.get('network_status', 'Unknown')}\n\n"
+            "Success Metrics\n\n"
+            "- Critical blockers resolved\n"
+            "- High-priority tasks advanced\n"
+            "- Integration tests passing\n"
+            "- Documentation updated\n\n"
+            "---\n\n"
+            "*This context bullet was automatically generated using real-time project data.*"
+        )
+
+        return content
+        """List all available POML templates."""
 
         print("AVAILABLE POML TEMPLATES")
         print("-" * 30)

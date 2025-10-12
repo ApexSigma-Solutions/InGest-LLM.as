@@ -19,7 +19,12 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ingest_llm_as.services.project_analyzer import get_qwen_project_analyzer
+try:
+    from ingest_llm_as.services.project_analyzer import get_qwen_project_analyzer
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 
 class QwenAnalysisDemo:
@@ -36,6 +41,12 @@ class QwenAnalysisDemo:
             start_time (datetime.datetime): Timestamp when the demo instance was created.
         """
         self.analyzer = get_qwen_project_analyzer()
+        """Initialize the demo."""
+        try:
+            self.analyzer = get_qwen_project_analyzer()
+        except Exception as e:
+            print(f"❌ Failed to initialize Qwen analyzer: {e}")
+            raise
         self.start_time = datetime.now()
 
     async def run_full_analysis(self, save_output: bool = False) -> None:
