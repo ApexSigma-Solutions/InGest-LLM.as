@@ -17,7 +17,12 @@ from collections import defaultdict
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from ingest_llm_as.observability.langfuse_client import get_langfuse_client
+try:
+    from ingest_llm_as.observability.langfuse_client import get_langfuse_client
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 
 @dataclass
@@ -49,11 +54,14 @@ class EmbeddingEfficiencyAnalyzer:
 
     def __init__(self):
         """Initialize the analyzer."""
-        self.langfuse_client = get_langfuse_client()
-        if not self.langfuse_client.enabled():
-            raise RuntimeError(
-                "Langfuse is not enabled. Please configure Langfuse settings."
-            )
+        try:
+            self.langfuse_client = get_langfuse_client()
+            if not self.langfuse_client.enabled():
+                raise RuntimeError(
+                    "Langfuse is not enabled. Please configure Langfuse settings."
+                )
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Langfuse client: {e}")
 
     def analyze_model_performance(
         self, hours_back: int = 24

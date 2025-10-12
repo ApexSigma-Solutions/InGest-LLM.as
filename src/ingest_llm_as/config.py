@@ -2,6 +2,7 @@
 Configuration settings for InGest-LLM.as service.
 """
 
+import os
 from typing import Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     hello: Optional[str] = None  # Development setting
+    enable_vault: bool = False  # Enable Vault secret fetching
 
     # Server configuration
     host: str = "0.0.0.0"
@@ -89,42 +91,62 @@ class Settings(BaseSettings):
 
     @field_validator("postgres_password", mode="before")
     @classmethod
-    def get_postgres_password(cls, v):
-        """Fetch PostgreSQL password from Vault if not provided."""
+    def get_postgres_password(cls, v: Optional[str]) -> Optional[str]:
+        """Fetch PostgreSQL password from Vault if not provided and Vault is enabled."""
         if v is None or v == "your_secure_postgres_password_here":
-            return get_secret("services/ingest/database", "postgres_password")
+            if os.environ.get("ENABLE_VAULT", "").lower() in ("true", "1", "yes"):
+                try:
+                    return get_secret("services/ingest/database", "postgres_password")
+                except Exception:  # noqa: BLE001 - Catching broad exception for external vault library
+                    return None
         return v
 
     @field_validator("memos_api_key", mode="before")
     @classmethod
-    def get_memos_api_key(cls, v):
-        """Fetch Memos API key from Vault if not provided."""
+    def get_memos_api_key(cls, v: Optional[str]) -> Optional[str]:
+        """Fetch Memos API key from Vault if not provided and Vault is enabled."""
         if v is None:
-            return get_secret("services/ingest/api", "memos_api_key")
+            if os.environ.get("ENABLE_VAULT", "").lower() in ("true", "1", "yes"):
+                try:
+                    return get_secret("services/ingest/api", "memos_api_key")
+                except Exception:  # noqa: BLE001 - Catching broad exception for external vault library
+                    return None
         return v
 
     @field_validator("lm_studio_api_key", mode="before")
     @classmethod
-    def get_lm_studio_api_key(cls, v):
-        """Fetch LM Studio API key from Vault if not provided."""
+    def get_lm_studio_api_key(cls, v: Optional[str]) -> Optional[str]:
+        """Fetch LM Studio API key from Vault if not provided and Vault is enabled."""
         if v is None:
-            return get_secret("services/ingest/llm", "lm_studio_api_key")
+            if os.environ.get("ENABLE_VAULT", "").lower() in ("true", "1", "yes"):
+                try:
+                    return get_secret("services/ingest/llm", "lm_studio_api_key")
+                except Exception:  # noqa: BLE001 - Catching broad exception for external vault library
+                    return None
         return v
 
     @field_validator("langfuse_public_key", mode="before")
     @classmethod
-    def get_langfuse_public_key(cls, v):
-        """Fetch Langfuse public key from Vault if not provided."""
+    def get_langfuse_public_key(cls, v: Optional[str]) -> Optional[str]:
+        """Fetch Langfuse public key from Vault if not provided and Vault is enabled."""
         if v is None:
-            return get_secret("services/ingest/observability", "langfuse_public_key")
+            if os.environ.get("ENABLE_VAULT", "").lower() in ("true", "1", "yes"):
+                try:
+                    return get_secret("services/ingest/observability", "langfuse_public_key")
+                except Exception:  # noqa: BLE001 - Catching broad exception for external vault library
+                    return None
         return v
 
     @field_validator("langfuse_secret_key", mode="before")
     @classmethod
-    def get_langfuse_secret_key(cls, v):
-        """Fetch Langfuse secret key from Vault if not provided."""
+    def get_langfuse_secret_key(cls, v: Optional[str]) -> Optional[str]:
+        """Fetch Langfuse secret key from Vault if not provided and Vault is enabled."""
         if v is None:
-            return get_secret("services/ingest/observability", "langfuse_secret_key")
+            if os.environ.get("ENABLE_VAULT", "").lower() in ("true", "1", "yes"):
+                try:
+                    return get_secret("services/ingest/observability", "langfuse_secret_key")
+                except Exception:  # noqa: BLE001 - Catching broad exception for external vault library
+                    return None
         return v
 
 

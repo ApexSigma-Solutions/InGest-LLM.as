@@ -19,9 +19,14 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ingest_llm_as.services.ecosystem_ingestion import get_ecosystem_ingestion_service
-from ingest_llm_as.services.memos_client import get_memos_client
-from ingest_llm_as.observability.logging import get_logger
+try:
+    from ingest_llm_as.services.ecosystem_ingestion import get_ecosystem_ingestion_service
+    from ingest_llm_as.services.memos_client import get_memos_client
+    from ingest_llm_as.observability.logging import get_logger
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 logger = get_logger(__name__)
 
@@ -31,8 +36,12 @@ class EODEcosystemUpdater:
 
     def __init__(self):
         """Initialize the EOD updater."""
-        self.ecosystem_service = get_ecosystem_ingestion_service()
-        self.memos_client = get_memos_client()
+        try:
+            self.ecosystem_service = get_ecosystem_ingestion_service()
+            self.memos_client = get_memos_client()
+        except Exception as e:
+            logger.error(f"Failed to initialize EOD updater: {e}")
+            raise
         self.start_time = datetime.now()
 
     async def run_eod_update(

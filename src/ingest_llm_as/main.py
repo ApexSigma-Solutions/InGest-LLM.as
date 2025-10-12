@@ -52,18 +52,61 @@ def health_check():
     """
     Comprehensive health check endpoint with observability status.
     """
-    # Get observability status
-    obs_status = get_observability_status()
+    from fastapi import HTTPException
 
-    # Create dependencies info
-    dependencies = {
-        "memOS.as": f"configured: {settings.memos_base_url}",
-        **obs_status.get("integrations", {}),
-    }
+    try:
+        # Get observability status
+        obs_status = get_observability_status()
 
-    return HealthResponse(
-        service=settings.app_name,
-        version=settings.app_version,
-        dependencies=dependencies,
-        **obs_status.get("observability", {}),
-    )
+        # Check critical dependencies
+        dependencies = {
+            "memOS.as": f"configured: {settings.memos_base_url}",
+            **obs_status.get("integrations", {}),
+        }
+
+        # Determine overall health status
+        observability = obs_status.get("observability", {})
+        integrations = obs_status.get("integrations", {})
+
+        # Check if critical services are available
+        critical_issues = []
+
+        # Check if memOS is configured
+        if not settings.memos_base_url or settings.memos_base_url == "":
+            critical_issues.append("memOS base URL not configured")
+
+        # Check observability components
+        if not observability.get("metrics_enabled", False):
+            critical_issues.append("metrics not enabled")
+        if not observability.get("tracing_enabled", False):
+            critical_issues.append("tracing not enabled")
+        if not observability.get("logging_structured", False):
+            critical_issues.append("structured logging not enabled")
+
+        # Determine status
+        status = "error" if critical_issues else "ok"
+
+        response = HealthResponse(
+            status=status,
+            service=settings.app_name,
+            version=settings.app_version,
+            dependencies=dependencies,
+            **observability,
+        )
+
+        # Return appropriate HTTP status
+        if status == "error":
+            # Still return 200 for health checks, but with error status in body
+            # Some monitoring systems expect 200 even for unhealthy services
+            pass
+
+        return response
+
+    except Exception as e:
+        # If health check itself fails, return error status
+        return HealthResponse(
+            status="error",
+            service=settings.app_name,
+            version=settings.app_version,
+            dependencies={"error": f"Health check failed: {str(e)}"},
+        )

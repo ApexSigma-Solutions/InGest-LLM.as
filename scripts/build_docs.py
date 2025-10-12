@@ -11,6 +11,7 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -24,19 +25,25 @@ except ImportError:
 
 # Import other components we've built
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_context_bullet import ContextBulletGenerator
+try:
+    from generate_context_bullet import ContextBulletGenerator
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure generate_context_bullet.py is available.")
+    sys.exit(1)
 
 
 class DocumentationBuilder:
     """Automated documentation builder for ApexSigma projects."""
 
-    def __init__(self, base_path: str = None):
+    def __init__(self, base_path: Optional[str] = None):
         """Initialize the documentation builder."""
-        self.base_path = (
-            Path(base_path)
-            if base_path
-            else Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
-        )
+        if base_path:
+            self.base_path = Path(base_path)
+        else:
+            # Default to repo root's parent (where sibling projects are located)
+            repo_root = Path(__file__).resolve().parents[1]
+            self.base_path = repo_root.parent
         self.projects = {
             "InGest-LLM.as": self.base_path / "InGest-LLM.as",
             "memos.as": self.base_path / "memos.as",

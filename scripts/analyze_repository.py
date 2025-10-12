@@ -11,14 +11,19 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from ingest_llm_as.services.repository_processor import get_repository_processor
-from ingest_llm_as.models import (
-    RepositoryIngestionRequest,
-    RepositorySource,
-    IngestionMetadata,
-    ContentType,
-    SourceType,
-)
+try:
+    from ingest_llm_as.services.repository_processor import get_repository_processor
+    from ingest_llm_as.models import (
+        RepositoryIngestionRequest,
+        RepositorySource,
+        IngestionMetadata,
+        ContentType,
+        SourceType,
+    )
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 
 async def analyze_current_repository():
@@ -164,9 +169,8 @@ async def analyze_current_repository():
         if python_files:
             total_elements = sum(f.elements_extracted for f in python_files)
             total_chunks = sum(f.chunks_created for f in python_files)
-            avg_complexity = sum(
-                f.complexity_score for f in python_files if f.complexity_score
-            ) / len([f for f in python_files if f.complexity_score])
+            scores = [f.complexity_score for f in python_files if f.complexity_score is not None]
+            avg_complexity = sum(scores) / len(scores) if scores else 0.0
 
             print("🐍 PYTHON CODE ANALYSIS")
             print("-" * 30)
@@ -189,7 +193,7 @@ async def analyze_current_repository():
 
         # Check for test coverage
         test_files = [f for f in successful_files if "test" in f.relative_path.lower()]
-        test_coverage = 0.0
+        test_coverage = None
         if python_files:
             test_coverage = len(test_files) / len(python_files) * 100
             print(
@@ -206,7 +210,7 @@ async def analyze_current_repository():
         if len(python_files) > 20:
             print("• Consider organizing code into more packages/modules")
 
-        if test_coverage < 50:
+        if test_coverage is not None and test_coverage < 50:
             print("• Consider adding more test coverage")
 
         if any(f.file_size > 50000 for f in successful_files):

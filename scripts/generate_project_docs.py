@@ -14,13 +14,19 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ingest_llm_as.services.project_documentation_generator import (
-    get_project_documentation_generator,
-)
+try:
+    from ingest_llm_as.services.project_documentation_generator import (
+        get_project_documentation_generator,
+    )
+except ImportError as e:
+    print(f"❌ Missing required dependency: {e}")
+    print("Please ensure all dependencies are installed.")
+    sys.exit(1)
 
 
 class ProjectDocumentationCLI:
@@ -32,7 +38,7 @@ class ProjectDocumentationCLI:
         self.start_time = datetime.now()
 
     async def run_documentation_generation(
-        self, project_name: str = None, generate_all: bool = False, force: bool = False
+        self, project_name: Optional[str] = None, generate_all: bool = False, force: bool = False
     ) -> None:
         """Run documentation generation."""
 

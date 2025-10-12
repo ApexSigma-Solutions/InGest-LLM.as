@@ -122,7 +122,12 @@ def analyze_repository():
     print("-" * 30)
 
     for file_path in all_files:
-        size = file_path.stat().st_size
+        try:
+            size = file_path.stat().st_size
+        except (OSError, IOError) as e:
+            print(f"Warning: Could not get size for {file_path}: {e}")
+            size = 0
+
         total_size += size
         extension = file_path.suffix or "no_extension"
 
@@ -145,7 +150,8 @@ def analyze_repository():
                     lines = len(f.readlines())
                 file_info["lines"] = lines
                 total_lines += lines
-            except:
+            except (IOError, OSError) as e:
+                print(f"Warning: Could not read {file_path}: {e}")
                 file_info["lines"] = 0
 
         file_analysis[extension].append(file_info)

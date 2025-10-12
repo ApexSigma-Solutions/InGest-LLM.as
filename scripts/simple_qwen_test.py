@@ -35,8 +35,10 @@ async def test_qwen_analysis():
                 for model in models:
                     print(f"  - {model}")
                 print()
-
-            # Test 2: Analyze InGest-LLM.as project
+            else:
+                print(f"❌ Failed to get models: HTTP {response.status_code}")
+                print(f"Response: {response.text[:200]}...")
+                print()
             print("2. ANALYZING INGEST-LLM.AS PROJECT")
             print("-" * 35)
 
@@ -146,7 +148,12 @@ Provide only the JSON response, no additional text."""
 
             if response.status_code == 200:
                 result = response.json()
-                ai_response = result["choices"][0]["message"]["content"]
+                choices = result.get("choices", [])
+                if choices and len(choices) > 0:
+                    message = choices[0].get("message", {})
+                    ai_response = message.get("content", "")
+                else:
+                    ai_response = ""
 
                 print("✅ Qwen analysis completed!")
                 print()
