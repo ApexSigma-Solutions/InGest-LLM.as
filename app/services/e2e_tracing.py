@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from contextlib import contextmanager
 
 from opentelemetry import trace, baggage
+from opentelemetry.context import attach, detach
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.propagate import extract, inject
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -105,18 +106,24 @@ class InGestE2ETracing:
                     span.set_attribute("data.record_count", record_count)
 
                 # Set ApexSigma correlation attributes
+                tokens = []
                 if correlation_id:
                     span.set_attribute("apexsigma.correlation_id", correlation_id)
-                    baggage.set_baggage("correlation_id", correlation_id)
+                    updated_context = baggage.set_baggage("correlation_id", correlation_id)
+                    tokens.append(attach(updated_context))
 
                 if workflow_id:
                     span.set_attribute("apexsigma.workflow_id", workflow_id)
-                    baggage.set_baggage("workflow_id", workflow_id)
+                    updated_context = baggage.set_baggage("workflow_id", workflow_id)
+                    tokens.append(attach(updated_context))
 
                 # Set baggage for cross-service propagation
-                baggage.set_baggage("service", self.service_name)
-                baggage.set_baggage("operation", ingestion_type)
-                baggage.set_baggage("data_source", data_source)
+                updated_context = baggage.set_baggage("service", self.service_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("operation", ingestion_type)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("data_source", data_source)
+                tokens.append(attach(updated_context))
 
                 logger.info(
                     "Data ingestion started",
@@ -127,7 +134,11 @@ class InGestE2ETracing:
                     trace_id=format(span.get_span_context().trace_id, "032x"),
                 )
 
-                yield span
+                try:
+                    yield span
+                finally:
+                    for token in tokens:
+                        detach(token)
 
                 span.set_status(Status(StatusCode.OK))
                 logger.info(
@@ -180,18 +191,24 @@ class InGestE2ETracing:
                     )
 
                 # Set ApexSigma correlation attributes
+                tokens = []
                 if correlation_id:
                     span.set_attribute("apexsigma.correlation_id", correlation_id)
-                    baggage.set_baggage("correlation_id", correlation_id)
+                    updated_context = baggage.set_baggage("correlation_id", correlation_id)
+                    tokens.append(attach(updated_context))
 
                 if workflow_id:
                     span.set_attribute("apexsigma.workflow_id", workflow_id)
-                    baggage.set_baggage("workflow_id", workflow_id)
+                    updated_context = baggage.set_baggage("workflow_id", workflow_id)
+                    tokens.append(attach(updated_context))
 
                 # Set baggage for cross-service propagation
-                baggage.set_baggage("service", self.service_name)
-                baggage.set_baggage("llm_model", model_name)
-                baggage.set_baggage("llm_operation", operation)
+                updated_context = baggage.set_baggage("service", self.service_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("llm_model", model_name)
+                tokens.append(attach(updated_context))
+                updated_context = baggage.set_baggage("llm_operation", operation)
+                tokens.append(attach(updated_context))
 
                 logger.info(
                     "LLM interaction started",
@@ -202,7 +219,11 @@ class InGestE2ETracing:
                     trace_id=format(span.get_span_context().trace_id, "032x"),
                 )
 
-                yield span
+                try:
+                    yield span
+                finally:
+                    for token in tokens:
+                        detach(token)
 
                 span.set_status(Status(StatusCode.OK))
                 logger.info(

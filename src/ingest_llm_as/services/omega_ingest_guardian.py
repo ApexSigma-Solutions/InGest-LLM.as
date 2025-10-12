@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..observability.logging import get_logger
 
@@ -24,6 +24,11 @@ class OmegaIngestGuardianSettings(BaseSettings):
     """Settings for OmegaIngestGuardian."""
 
     projects_base_path: Path = Path("C:\\Users\\steyn\\ApexSigmaProjects.Dev")
+
+    model_config = SettingsConfigDict(
+        env_prefix="OMEGA_",
+        extra="ignore",
+    )
 
 
 @dataclass
@@ -75,8 +80,6 @@ class OmegaIngestGuardian:
         """Initialize the Omega Ingest Guardian."""
         settings = OmegaIngestGuardianSettings()
         self.base_path = settings.projects_base_path if base_path is None else Path(base_path)
-        """Initialize the enhanced Omega Ingest Guardian."""
-        self.base_path = Path(base_path)
         self.logger = get_logger(__name__)
         self.version = "8.0"
 
@@ -97,34 +100,36 @@ class OmegaIngestGuardian:
             # Parse the POML XML structure
             root = ET.fromstring(f"<root>{poml_data}</root>")
 
-            entities = []
-            relationships = []
-            events = []
+            entities: list[POMLEntity] = []
+            relationships: list[dict[str, Any]] = []
+            events: list[dict[str, Any]] = []
 
             # Process Projects
             projects = root.find(".//Projects")
             if projects:
                 for project in projects.findall("Project"):
-                    entities.append(
-                        POMLEntity(
-                            entity_id=project.get("id"),
-                            entity_type="project",
-                            name=project.findtext("Name") or "",
-                            description=project.findtext("Description") or "",
-                            status=project.findtext("Status") or "",
-                            metadata={
-                                "vision": (
-                                    project.findtext("Vision")
-                                    if project.find("Vision") is not None
-                                    else None
-                                ),
-                                "architecture": (
-                                    project.find("Architecture").attrib
-                                    if project.find("Architecture") is not None
-                                    else {}
-                                ),
-                            },
-                            timestamp=datetime.now(timezone.utc).isoformat(),
+                    entity_id = project.get("id")
+                    if entity_id:
+                        entities.append(
+                            POMLEntity(
+                                entity_id=entity_id,
+                                entity_type="project",
+                                name=project.findtext("Name") or "",
+                                description=project.findtext("Description") or "",
+                                status=project.findtext("Status") or "",
+                                metadata={
+                                    "vision": (
+                                        project.findtext("Vision")
+                                        if project.find("Vision") is not None
+                                        else None
+                                    ),
+                                    "architecture": (
+                                        project.find("Architecture").attrib
+                                        if project.find("Architecture") is not None
+                                        else {}
+                                    ),
+                                },
+                                timestamp=datetime.now(timezone.utc).isoformat(),
                             relationships=[],
                         )
                     )

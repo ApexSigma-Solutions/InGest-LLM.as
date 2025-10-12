@@ -151,8 +151,10 @@ PROMETHEUS_URL="http://prometheus:9090"
 JAEGER_ENDPOINT="http://jaeger:14268"
 GRAFANA_URL="http://grafana:3001"
 LANGFUSE_HOST="https://cloud.langfuse.com"
-LANGFUSE_PUBLIC_KEY="pk-lf-f58be3ee-e274-4bf1-8ffe-4df7e9fcf61e"
-LANGFUSE_SECRET_KEY="sk-lf-1d26cfb7-fcaf-4fdf-830e-a9ae4d32d7fa"
+LANGFUSE_PUBLIC_KEY="<REDACTED>"
+LANGFUSE_SECRET_KEY="<REDACTED>"
+
+**Note**: Actual Langfuse credentials must be stored in a .env file and never committed to version control.
 ```
 
 ### Processing Configuration
