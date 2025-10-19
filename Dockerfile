@@ -3,7 +3,7 @@
 # Use a full-featured base image to install build dependencies and compile the
 # application environment.
 # ============================================================================
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV POETRY_NO_INTERACTION=1
@@ -34,7 +34,7 @@ RUN poetry install --with dev --no-root
 # ============================================================================
 # STAGE 2: Final Stage
 # ============================================================================
-FROM python:3.11-slim AS final
+FROM python:3.13-slim AS final
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV POETRY_NO_INTERACTION=1
