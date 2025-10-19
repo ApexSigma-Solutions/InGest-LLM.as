@@ -32,6 +32,24 @@ sniffio = ">=1.1"
 trio = ["trio (>=0.31.0)"]
 
 [[package]]
+name = "apexsigma-core"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = ">=3.13,<4.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+hvac = ">=2.0.0,<3.0.0"
+pydantic-settings = ">=2.10.1,<3.0.0"
+
+[package.source]
+type = "directory"
+url = "../../libs/apexsigma-core"
+
+[[package]]
 name = "asgiref"
 version = "3.10.0"
 description = "ASGI specs, helper code, and adapters"
@@ -507,6 +525,24 @@ cli = ["click (==8.*)", "pygments (==2.*)", "rich (>=10,<14)"]
 http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
 zstd = ["zstandard (>=0.18.0)"]
+
+[[package]]
+name = "hvac"
+version = "2.3.0"
+description = "HashiCorp Vault API client"
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "hvac-2.3.0-py3-none-any.whl", hash = "sha256:a3afc5710760b6ee9b3571769df87a0333da45da05a5f9f963e1d3925a84be7d"},
+    {file = "hvac-2.3.0.tar.gz", hash = "sha256:1b85e3320e8642dd82f234db63253cda169a817589e823713dc5fca83119b1e2"},
+]
+
+[package.dependencies]
+requests = ">=2.27.1,<3.0.0"
+
+[package.extras]
+parser = ["pyhcl (>=0.4.4,<0.5.0)"]
 
 [[package]]
 name = "identify"
@@ -2621,4 +2657,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "09769d25fef548c2ad3b5d17c88c227a7bfaec1d33d4dd114067e4a7317c6e85"
+content-hash = "cb5f7a4e3cbeb768943c5d5f0a890210b60d0857eee2dce2c344ed25b2f2a3e7"

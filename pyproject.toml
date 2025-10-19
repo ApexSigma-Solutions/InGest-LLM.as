@@ -9,6 +9,7 @@ packages = [{include = "ingest_llm_as", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.13"
+apexsigma-core = {path = "../../libs/apexsigma-core", develop = true}
 fastapi = "^0.119.0"
 uvicorn = {extras = ["standard"], version = "^0.30.1"}
 starlette = "^0.40.0"

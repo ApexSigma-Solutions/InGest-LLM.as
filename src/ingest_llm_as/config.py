@@ -3,77 +3,107 @@ Configuration settings for InGest-LLM.as service.
 """
 
 from typing import Optional
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from apexsigma_core.vault import get_secret
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Service configuration
-    app_name: str = "InGest-LLM.as"
-    app_version: str = "0.1.0"
-    debug: bool = False
-    hello: Optional[str] = None  # Development setting
+    app_name: str = Field(default="InGest-LLM.as", description="Application name")
+    app_version: str = Field(default="0.1.0", description="Application version")
+    debug: bool = Field(default=False, description="Debug mode")
+    hello: Optional[str] = Field(default=None, description="Development setting")
 
     # Server configuration
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str = Field(default="0.0.0.0", description="Server host")
+    port: int = Field(default=8000, description="Server port")
 
     # Service endpoints integration - UPDATED FOR DOCKER NETWORKING
-    base_url: str = "http://localhost:8000"
-    memos_base_url: str = "http://memos:8090"  # Use service name, not localhost
-    tools_base_url: str = "http://localhost:8003"
-    agent_bridge_url: str = "http://localhost:8100"
-    memos_api_key: Optional[str] = None
-    memos_timeout: int = 30
+    base_url: str = Field(default="http://localhost:8000", description="Base URL for this service")
+    memos_base_url: str = Field(default="http://memos:8090", description="memOS API URL")
+    tools_base_url: str = Field(default="http://localhost:8003", description="Tools API URL")
+    agent_bridge_url: str = Field(default="http://localhost:8100", description="Agent Bridge URL")
+    memos_api_key: Optional[str] = Field(default=None, description="memOS API key")
+    memos_timeout: int = Field(default=30, description="memOS API timeout in seconds")
 
     # Database configuration - UPDATED FOR DOCKER NETWORKING
-    postgres_host: str = "postgres"
-    postgres_port: str = "5432"
-    postgres_user: str = "memos"
-    postgres_password: str = "memos_password"
-    postgres_db: str = "memos"
-    redis_host: str = "redis"
-    redis_port: str = "6379"
-    neo4j_host: str = "neo4j"
-    neo4j_port: str = "7687"
-    qdrant_host: str = "qdrant"
-    qdrant_port: str = "6333"
+    postgres_host: str = Field(default="postgres", description="PostgreSQL host")
+    postgres_port: int = Field(default=5432, description="PostgreSQL port")
+    postgres_user: str = Field(default="memos", description="PostgreSQL username")
+    postgres_password: Optional[str] = Field(default=None, description="PostgreSQL password")
+    postgres_db: str = Field(default="memos", description="PostgreSQL database name")
+    
+    redis_host: str = Field(default="redis", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    
+    neo4j_host: str = Field(default="neo4j", description="Neo4j host")
+    neo4j_port: int = Field(default=7687, description="Neo4j Bolt port")
+    
+    qdrant_host: str = Field(default="qdrant", description="Qdrant host")
+    qdrant_port: int = Field(default=6333, description="Qdrant port")
 
     # Observability endpoints - UPDATED FOR DOCKER NETWORKING
-    prometheus_url: str = "http://prometheus:9090"
-    grafana_url: str = "http://localhost:3001"
-    jaeger_endpoint: str = "http://jaeger:14268/api/traces"
+    prometheus_url: str = Field(default="http://prometheus:9090", description="Prometheus URL")
+    grafana_url: str = Field(default="http://localhost:3001", description="Grafana URL")
+    jaeger_endpoint: str = Field(default="http://jaeger:14268/api/traces", description="Jaeger tracing endpoint")
 
     # Processing limits
-    max_content_size: int = 1_000_000  # 1MB
-    default_chunk_size: int = 1000
-    max_chunks_per_request: int = 100
+    max_content_size: int = Field(default=1_000_000, description="Max content size in bytes (1MB)")
+    default_chunk_size: int = Field(default=1000, description="Default chunk size")
+    max_chunks_per_request: int = Field(default=100, description="Max chunks per request")
 
     # Async processing
-    enable_async_processing: bool = True
-    async_queue_max_size: int = 1000
+    enable_async_processing: bool = Field(default=True, description="Enable async processing")
+    async_queue_max_size: int = Field(default=1000, description="Async queue max size")
 
     # LM Studio integration for embeddings
-    lm_studio_base_url: str = "http://localhost:1234/v1"
-    lm_studio_api_key: Optional[str] = None
-    lm_studio_timeout: int = 30
-    lm_studio_enabled: bool = True
+    lm_studio_base_url: str = Field(default="http://localhost:1234/v1", description="LM Studio API base URL")
+    lm_studio_api_key: Optional[str] = Field(default=None, description="LM Studio API key")
+    lm_studio_timeout: int = Field(default=30, description="LM Studio timeout in seconds")
+    lm_studio_enabled: bool = Field(default=True, description="Enable LM Studio integration")
 
     # Embedding configuration
-    embedding_enabled: bool = True
-    embedding_batch_size: int = 10
-    embedding_dimension: int = 768  # Default for nomic-embed models
+    embedding_enabled: bool = Field(default=True, description="Enable embedding generation")
+    embedding_batch_size: int = Field(default=10, description="Embedding batch size")
+    embedding_dimension: int = Field(default=768, description="Embedding dimension (default for nomic-embed)")
 
     # Observability
-    log_level: str = "INFO"
-    log_json: bool = True
-    environment: str = "docker"
+    log_level: str = Field(default="INFO", description="Log level")
+    log_json: bool = Field(default=True, description="Use JSON logging")
+    environment: str = Field(default="docker", description="Environment name")
 
     # Langfuse observability integration
-    langfuse_public_key: Optional[str] = None
-    langfuse_secret_key: Optional[str] = None
-    langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_public_key: Optional[str] = Field(default=None, description="Langfuse public key")
+    langfuse_secret_key: Optional[str] = Field(default=None, description="Langfuse secret key")
+    langfuse_host: str = Field(default="https://cloud.langfuse.com", description="Langfuse host URL")
+
+    @field_validator("postgres_password", mode="before")
+    @classmethod
+    def get_postgres_password(cls, v):
+        """Fetch PostgreSQL password from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest-llm/database", "postgres_password")
+        return v
+
+    @field_validator("langfuse_public_key", mode="before")
+    @classmethod
+    def get_langfuse_public_key(cls, v):
+        """Fetch Langfuse public key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest-llm/observability", "langfuse_public_key")
+        return v
+
+    @field_validator("langfuse_secret_key", mode="before")
+    @classmethod
+    def get_langfuse_secret_key(cls, v):
+        """Fetch Langfuse secret key from Vault if not provided."""
+        if v is None:
+            return get_secret("services/ingest-llm/observability", "langfuse_secret_key")
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",
