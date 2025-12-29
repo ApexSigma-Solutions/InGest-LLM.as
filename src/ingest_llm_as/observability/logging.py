@@ -1,99 +1,57 @@
-"""
-Structured logging configuration for InGest-LLM.as.
+"""Logging helpers.
 
-Provides structured logging with JSON formatting for integration with
-Loki and the existing observability stack.
+The project is intentionally removing the observability stack (OTel/Prometheus/
+Langfuse/structlog) for now.
+
+This module keeps the *same* helper functions used across the codebase, but
+backs them with Python's standard library :mod:`logging`.
 """
 
-import os
-import sys
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, Optional
-
-import structlog
-from opentelemetry import trace
-
-from ..config import settings
+import sys
+from typing import Any, Dict, Optional
 
 
-def setup_logging(log_level: str = "INFO", enable_json: bool = True) -> None:
+_configured = False
+
+
+def setup_logging(log_level: str = "INFO") -> None:
+    """Configure stdlib logging.
+
+    Called lazily by :func:`get_logger`.
     """
-    Setup structured logging for the application.
-    
-    Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
-        enable_json: Whether to enable JSON formatting
-    """
-    # Configure structlog
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            add_service_context,
-            add_trace_context,
-            structlog.dev.ConsoleRenderer(colors=not enable_json) if not enable_json 
-            else structlog.processors.JSONRenderer()
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, log_level.upper())
-        ),
-        logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=True,
-    )
-    
-    # Configure standard library logging
+    global _configured
+    if _configured:
+        return
+
+    level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(
-        format="%(message)s",
+        level=level,
         stream=sys.stdout,
-        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
     )
-    
+
     # Silence noisy third-party loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-
-def add_service_context(logger, method_name, event_dict):
-    """Add service context to log events."""
-    event_dict.update({
-        "service": settings.app_name,
-        "version": settings.app_version,
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "namespace": "apexsigma"
-    })
-    return event_dict
+    _configured = True
 
 
-def add_trace_context(logger, method_name, event_dict):
-    """Add OpenTelemetry trace context to log events."""
-    current_span = trace.get_current_span()
-    if current_span:
-        span_context = current_span.get_span_context()
-        if span_context.is_valid:
-            event_dict.update({
-                "trace_id": format(span_context.trace_id, "032x"),
-                "span_id": format(span_context.span_id, "016x"),
-            })
-    return event_dict
+def get_logger(name: str = __name__) -> logging.Logger:
+    """Get a logger instance.
 
-
-def get_logger(name: str = __name__) -> structlog.BoundLogger:
+    We intentionally avoid any structured logging dependencies right now.
     """
-    Get a structured logger instance.
-    
-    Args:
-        name: Logger name (usually __name__)
-        
-    Returns:
-        structlog.BoundLogger: Configured logger instance
-    """
-    return structlog.get_logger(name)
+    setup_logging()
+    return logging.getLogger(name)
 
 
 def log_ingestion_start(
-    logger: structlog.BoundLogger,
+    logger: logging.Logger,
     ingestion_id: str,
     content_type: str,
     content_size: int,
@@ -101,17 +59,16 @@ def log_ingestion_start(
 ):
     """Log the start of an ingestion operation."""
     logger.info(
-        "Ingestion started",
-        event_type="ingestion.start",
-        ingestion_id=ingestion_id,
-        content_type=content_type,
-        content_size=content_size,
-        metadata=metadata or {},
+        "Ingestion started | ingestion_id=%s content_type=%s content_size=%s metadata=%s",
+        ingestion_id,
+        content_type,
+        content_size,
+        metadata or {},
     )
 
 
 def log_ingestion_complete(
-    logger: structlog.BoundLogger,
+    logger: logging.Logger,
     ingestion_id: str,
     status: str,
     duration_ms: int,
@@ -120,26 +77,34 @@ def log_ingestion_complete(
     error_message: Optional[str] = None
 ):
     """Log the completion of an ingestion operation."""
-    log_data = {
-        "event_type": "ingestion.complete",
-        "ingestion_id": ingestion_id,
-        "status": status,
-        "duration_ms": duration_ms,
-        "chunks_processed": chunks_processed,
-        "memory_tier": memory_tier,
-    }
-    
-    if error_message:
-        log_data["error_message"] = error_message
-    
+    msg = (
+        "Ingestion complete | ingestion_id=%s status=%s duration_ms=%s "
+        "chunks_processed=%s memory_tier=%s error=%s"
+    )
     if status == "completed":
-        logger.info("Ingestion completed successfully", **log_data)
+        logger.info(
+            msg,
+            ingestion_id,
+            status,
+            duration_ms,
+            chunks_processed,
+            memory_tier,
+            error_message,
+        )
     else:
-        logger.error("Ingestion failed", **log_data)
+        logger.error(
+            msg,
+            ingestion_id,
+            status,
+            duration_ms,
+            chunks_processed,
+            memory_tier,
+            error_message,
+        )
 
 
 def log_memos_request(
-    logger: structlog.BoundLogger,
+    logger: logging.Logger,
     endpoint: str,
     method: str,
     status_code: int,
@@ -149,30 +114,36 @@ def log_memos_request(
     error_message: Optional[str] = None
 ):
     """Log a request to memOS.as service."""
-    log_data = {
-        "event_type": "memos.request",
-        "endpoint": endpoint,
-        "method": method,
-        "status_code": status_code,
-        "duration_ms": duration_ms,
-        "service": "memOS.as",
-    }
-    
-    if request_size:
-        log_data["request_size"] = request_size
-    if response_size:
-        log_data["response_size"] = response_size
-    if error_message:
-        log_data["error_message"] = error_message
-    
+    msg = (
+        "memOS request | method=%s endpoint=%s status_code=%s duration_ms=%s "
+        "request_size=%s response_size=%s error=%s"
+    )
     if 200 <= status_code < 400:
-        logger.info("memOS.as request successful", **log_data)
+        logger.info(
+            msg,
+            method,
+            endpoint,
+            status_code,
+            duration_ms,
+            request_size,
+            response_size,
+            error_message,
+        )
     else:
-        logger.error("memOS.as request failed", **log_data)
+        logger.error(
+            msg,
+            method,
+            endpoint,
+            status_code,
+            duration_ms,
+            request_size,
+            response_size,
+            error_message,
+        )
 
 
 def log_content_processing(
-    logger: structlog.BoundLogger,
+    logger: logging.Logger,
     operation: str,
     content_size: int,
     chunks_created: int = 0,
@@ -181,18 +152,17 @@ def log_content_processing(
 ):
     """Log content processing operations."""
     logger.info(
-        f"Content processing: {operation}",
-        event_type="content.processing",
-        operation=operation,
-        content_size=content_size,
-        chunks_created=chunks_created,
-        processing_time_ms=processing_time_ms,
-        metadata=metadata or {},
+        "Content processing | operation=%s content_size=%s chunks_created=%s processing_time_ms=%s metadata=%s",
+        operation,
+        content_size,
+        chunks_created,
+        processing_time_ms,
+        metadata or {},
     )
 
 
 def log_health_check(
-    logger: structlog.BoundLogger,
+    logger: logging.Logger,
     service: str,
     status: str,
     response_time_ms: int,
@@ -200,12 +170,11 @@ def log_health_check(
 ):
     """Log health check results."""
     logger.info(
-        f"Health check: {service}",
-        event_type="health.check",
-        target_service=service,
-        status=status,
-        response_time_ms=response_time_ms,
-        details=details or {},
+        "Health check | target_service=%s status=%s response_time_ms=%s details=%s",
+        service,
+        status,
+        response_time_ms,
+        details or {},
     )
 
 
@@ -216,15 +185,8 @@ class IngestionContextFilter:
         self.ingestion_id = ingestion_id
     
     def __enter__(self):
-        structlog.contextvars.bind_contextvars(ingestion_id=self.ingestion_id)
+        # No structured context binding while observability stack is removed.
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        structlog.contextvars.unbind_contextvars("ingestion_id")
-
-
-# Initialize logging on module import
-setup_logging(
-    log_level=os.getenv("LOG_LEVEL", "INFO"),
-    enable_json=os.getenv("LOG_JSON", "true").lower() == "true"
-)
+        return None

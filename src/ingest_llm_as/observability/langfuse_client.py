@@ -1,50 +1,46 @@
+"""Langfuse client shim.
+
+Observability is intentionally removed for now.
+
+This module remains to preserve import compatibility across the codebase, but
+provides a no-op implementation (no external deps, no network calls).
 """
-Langfuse LLM observability client for InGest-LLM.as.
 
-Provides LLM-specific observability including tracing, metrics, and
-quality evaluation for agent interactions in the ApexSigma ecosystem.
-"""
+from __future__ import annotations
 
-import os
-from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from langfuse import Langfuse
+
+@dataclass
+class _NoOpLangfuseSDK:
+    """Mimics the small subset of the Langfuse SDK used in this repo."""
+
+    def trace(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+        return None
+
+    def generation(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    def flush(self) -> None:
+        return None
 
 
 class LangfuseClient:
     """Langfuse client for LLM observability."""
 
     def __init__(self):
-        """Initialize Langfuse client with environment configuration."""
-        self.client = None
-        self._initialize_client()
-
-    def _initialize_client(self):
-        """Initialize the Langfuse client."""
-        try:
-            public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
-            secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
-            host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
-
-            if public_key and secret_key:
-                self.client = Langfuse(
-                    public_key=public_key, secret_key=secret_key, host=host
-                )
-                print("Langfuse client initialized successfully")
-            else:
-                print("Langfuse API keys not found in environment")
-        except Exception as e:
-            print(f"Failed to initialize Langfuse client: {e}")
-            self.client = None
+        """Initialize a no-op Langfuse client."""
+        self.client = _NoOpLangfuseSDK()
 
     def is_available(self) -> bool:
         """Check if Langfuse client is available."""
-        return self.client is not None
+        return False
 
     @property
     def enabled(self) -> bool:
         """Check if Langfuse client is enabled (alias for is_available)."""
-        return self.is_available()
+        return False
 
     def create_trace(
         self,
@@ -54,20 +50,7 @@ class LangfuseClient:
         input_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Create a new trace."""
-        if not self.client:
-            return None
-
-        try:
-            # Merge input_data into metadata if provided
-            if input_data:
-                metadata = metadata or {}
-                metadata.update(input_data)
-
-            trace = self.client.start_as_current_span(name=name, metadata=metadata)
-            return getattr(trace, "id", None)
-        except Exception as e:
-            print(f"Failed to create trace: {e}")
-            return None
+        return None
 
     def create_generation(
         self,
@@ -78,39 +61,25 @@ class LangfuseClient:
         metadata: Optional[Dict[str, Any]] = None,
     ):
         """Create a generation record."""
-        if not self.client:
-            return
-
-        try:
-            generation = self.client.start_as_current_generation(
-                name=name,
-                model=model,
-                input=input_text,
-                output=output_text,
-                metadata=metadata,
-            )
-            return getattr(generation, "id", None)
-        except Exception as e:
-            print(f"Failed to create generation: {e}")
-            return None
+        return None
 
     def create_score(self, name: str, value: float, comment: Optional[str] = None):
         """Create a score for evaluation."""
-        if not self.client:
-            return
+        return None
 
-        try:
-            self.client.score_current_trace(name=name, value=value, comment=comment)
-        except Exception as e:
-            print(f"Failed to create score: {e}")
+    def score_trace(
+        self,
+        trace_id: str,
+        name: str,
+        value: float,
+        comment: Optional[str] = None,
+    ) -> None:
+        """Compatibility method used throughout the codebase."""
+        return None
 
     def flush(self):
         """Flush pending events."""
-        if self.client:
-            try:
-                self.client.flush()
-            except Exception as e:
-                print(f"Failed to flush Langfuse events: {e}")
+        return None
 
 
 # Global client instance
