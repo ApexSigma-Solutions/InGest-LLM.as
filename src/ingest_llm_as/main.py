@@ -5,6 +5,7 @@ from .api.ingestion import router as ingestion_router
 from .api.repository import router as repository_router
 from .api.ecosystem import router as ecosystem_router
 from .api.analysis import router as analysis_router
+from .routers.webhook import router as webhook_router
 
 # from .api.omega_ingest import router as omega_ingest_router  # Temporarily disabled due to import issues
 # from .routers.eod_logs import router as eod_logs_router  # Temporarily disabled due to missing core modules
@@ -29,6 +30,7 @@ app.include_router(ingestion_router)
 app.include_router(repository_router)
 app.include_router(ecosystem_router)
 app.include_router(analysis_router)
+app.include_router(webhook_router)
 # app.include_router(omega_ingest_router)  # Temporarily disabled due to import issues
 # app.include_router(eod_logs_router)  # Temporarily disabled due to missing core modules
 
@@ -54,9 +56,13 @@ def health_check():
     # Get observability status
     obs_status = get_observability_status()
 
+    # Import circuit breaker for status
+    from .routers.webhook import linear_circuit_breaker
+
     # Create dependencies info
     dependencies = {
         "memOS.as": f"configured: {settings.memos_base_url}",
+        "linear_circuit_breaker": linear_circuit_breaker.get_status()["state"],
         **obs_status.get("integrations", {}),
     }
 
