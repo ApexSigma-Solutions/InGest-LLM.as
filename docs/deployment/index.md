@@ -5,6 +5,7 @@ This section provides comprehensive guides for deploying InGest-LLM.as in variou
 ## Quick Links
 
 - [Infrastructure Setup](infrastructure.md) - Core infrastructure components and configuration
+- [Tunnel and Webhook Verification](tunnel-verification.md) - Cloudflare tunnel and Linear webhook setup
 - [Docker Deployment](../docker-compose.README.md) - Container-based deployment guide
 
 ## Deployment Options
@@ -52,8 +53,15 @@ For secure, production deployments with external access:
 3. **Configure tunnel routing**
    - Map tunnel hostname to localhost:8000
    - Set up DNS routing through Cloudflare
+   - See [Tunnel and Webhook Verification](tunnel-verification.md) for detailed steps
 
-4. **Enable monitoring**
+4. **Verify webhook integration** (if using Linear)
+   - Configure Linear webhook settings
+   - Set up webhook secret in environment
+   - Test webhook delivery
+   - See [Tunnel and Webhook Verification](tunnel-verification.md) for complete guide
+
+5. **Enable monitoring**
    - Configure observability stack (optional)
    - Set up health check monitoring
 
@@ -89,6 +97,10 @@ INGEST_LM_STUDIO_ENABLED=true
 INGEST_EMBEDDING_ENABLED=true
 INGEST_LM_STUDIO_BASE_URL=http://localhost:1234/v1
 
+# Webhook Configuration (if using Linear integration)
+LINEAR_WEBHOOK_SECRET=your-webhook-secret-from-linear
+FORWARDER_INGEST_LLM_URL=http://ingest-llm:8000
+
 # Observability (optional)
 INGEST_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
 INGEST_LOG_LEVEL=INFO
@@ -108,6 +120,7 @@ See `.env.example` for a complete list of configuration options.
 The service provides several endpoints for monitoring:
 
 - `GET /health` - Comprehensive health check with dependency status
+- `GET /webhook/health` - Webhook forwarder health check
 - `GET /` - Service information and version
 
 Configure your monitoring tools to poll these endpoints regularly.
