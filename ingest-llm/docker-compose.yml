@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  ingest-llm:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8766:8000"  # Host:Container (dynamic)
+    environment:
+      - DATABASE_URL=postgresql://omega_user:password@postgres:5800/omega_kg_stable
+      - NEO4J_URI=bolt://neo4j:7687
+    # networks:
+    #   - apexsigma.net  # Temporarily disabled for debugging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# networks:
+#   apexsigma.net:
+#     external: true  # Shared with Omega_KG and memOS
