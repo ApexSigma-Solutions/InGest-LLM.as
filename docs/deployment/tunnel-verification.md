@@ -187,19 +187,28 @@ INF POST /webhook/linear HTTP/1.1 status=202
 
 ### Test via cURL (Manual)
 
-Generate a test signature and payload:
+**Note:** For consistent testing, it's recommended to use the `scripts/test_webhook.py` script instead of manual cURL commands, as it handles signature generation correctly.
+
+If you need to test manually with cURL:
 
 ```bash
-# Generate HMAC signature
-echo -n '{"type":"Issue","action":"create","data":{"id":"TEST-123"}}' | \
+# Generate HMAC signature (this must match your payload exactly)
+PAYLOAD='{"type":"Issue","action":"create","data":{"id":"TEST-123","title":"Test Issue","description":"Test webhook event","state":{"name":"Todo"},"team":{"name":"Engineering"}},"createdAt":"2025-12-31T20:00:00.000Z","organizationId":"test-org","webhookId":"test-webhook"}'
+
+echo -n "$PAYLOAD" | \
   openssl dgst -sha256 -hmac "your_webhook_secret" | \
   awk '{print "sha256="$2}'
 
-# Send test request
+# Send test request (replace GENERATED_SIGNATURE with the output from above)
 curl -X POST https://ingest.apexsigmasolutions.co.za/webhook/linear \
   -H "Content-Type: application/json" \
   -H "Linear-Signature: sha256=GENERATED_SIGNATURE" \
-  -d '{"type":"Issue","action":"create","data":{"id":"TEST-123"}}'
+  -d "$PAYLOAD"
+```
+
+**Recommended:** Use the testing script for easier testing:
+```bash
+python scripts/test_webhook.py --url https://ingest.apexsigmasolutions.co.za --secret "your_webhook_secret"
 ```
 
 Expected response:

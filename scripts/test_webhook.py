@@ -59,6 +59,8 @@ def create_test_payload() -> Dict[str, Any]:
     Returns:
         Test payload dictionary
     """
+    from datetime import datetime
+    
     return {
         "type": "Issue",
         "action": "create",
@@ -73,7 +75,7 @@ def create_test_payload() -> Dict[str, Any]:
                 "name": "Engineering"
             }
         },
-        "createdAt": "2025-12-31T20:00:00.000Z",
+        "createdAt": datetime.utcnow().isoformat() + "Z",
         "organizationId": "test-org-123",
         "webhookId": "test-webhook-id"
     }
