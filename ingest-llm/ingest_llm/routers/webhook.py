@@ -4,6 +4,7 @@ Linear Webhook Receiver
 Handles Linear webhook events with circuit breaker and DLQ support.
 Phase: TN-LINEAR-06 - Webhook Ingestion Pipeline
 """
+
 import logging
 import os
 import time
@@ -37,7 +38,7 @@ circuit_breaker = CircuitBreaker(
     name="linear_webhook",
 )
 
-saga = SagaOrchestrator()
+saga = SagaOrchestrator(postgres_dsn=POSTGRES_DSN)
 
 router = APIRouter(tags=["webhook"])
 
