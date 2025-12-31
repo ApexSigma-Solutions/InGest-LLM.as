@@ -32,6 +32,9 @@ nav:
   - 'Introduction': 'index.md'
   - 'Tutorials': 'tutorials/index.md'
   - 'How-To Guides': 'how-to/index.md'
+  - 'Deployment':
+    - 'deployment/index.md'
+    - 'Infrastructure Setup': 'deployment/infrastructure.md'
   - 'API Reference':
     - 'reference/index.md'
     - 'Ingestion API': 'reference/ingestion.md'
