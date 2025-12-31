@@ -1,6 +1,114 @@
+# -----------------------------------------------------------------------------
+# Python / Core
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
+# -----------------------------------------------------------------------------
+# Virtual Environments (Poetry & venv)
+# -----------------------------------------------------------------------------
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# -----------------------------------------------------------------------------
+# Dependency Management
+# -----------------------------------------------------------------------------
+# Poetry: Keep poetry.lock committed, but ignore local config
+poetry.toml
+
+# -----------------------------------------------------------------------------
+# Environment Variables & Secrets (CRITICAL)
+# -----------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
-.flaskenv*
-!.env.project
+*.pem
+*.key
+secrets.json
+
+# -----------------------------------------------------------------------------
+# Cloudflare / Tunnel Artifacts
+# -----------------------------------------------------------------------------
+# Prevent accidental commit of tunnel credentials if generated locally
+.cloudflared/
+*.cfargotunnel.json
+
+# -----------------------------------------------------------------------------
+# Testing & Quality Assurance
+# -----------------------------------------------------------------------------
+.coverage
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Type Checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.ruff_cache/
+
+# -----------------------------------------------------------------------------
+# IDE & Tooling
+# -----------------------------------------------------------------------------
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains / PyCharm
+.idea/
+*.iml
+
+# -----------------------------------------------------------------------------
+# OS Generated Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# -----------------------------------------------------------------------------
+# Application Specific (Logs & Databases)
+# -----------------------------------------------------------------------------
+*.log
+*.sqlite3
+*.db
+/logs
+/data

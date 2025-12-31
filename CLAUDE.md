@@ -127,9 +127,7 @@ LM Studio references are legacy. The project is migrating to **Ollama** as the l
 
 ## External Dependencies
 
-### Local Workspace Library
-- **apexsigma-core**: Local library at `../../libs/apexsigma-core` (see [pyproject.toml](pyproject.toml))
-- Poetry develop mode dependency
+This microservice is **self-contained** with no external library dependencies. All functionality is implemented within the service.
 
 ### memOS.as Connectivity
 Configured via environment variables (see [config.py](src/ingest_llm_as/config.py)):
