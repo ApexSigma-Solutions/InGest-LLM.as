@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .config import get_settings
@@ -12,10 +14,44 @@ from .api.omega_ingest import router as omega_ingest_router
 from .routers.eod_logs import router as eod_logs_router
 from .routers.webhook_forwarder import router as webhook_forwarder_router
 from .observability.logging import get_logger
-
+from ingest_llm_as.processors.conversation_ingestor import ConversationIngestor
 
 logger = get_logger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+    Handles startup/shutdown of background tasks and resources.
+    """
+    # Startup
+    logger.info("Initializing InGest-LLM services...")
+    
+    settings = get_settings()
+    logger.info(f"DEBUG: raw_db_url={settings.raw_db_url}")
+    logger.info(f"DEBUG: neo4j_uri={settings.neo4j_uri}")
+    
+    try:
+        # Start Conversation Ingestor
+        ingestor = ConversationIngestor()
+        # Run as background task
+        task = asyncio.create_task(ingestor.start())
+        pass
+    except Exception as e:
+        logger.error(f"CRITICAL STARTUP ERROR: {e}", exc_info=True)
+        raise e
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down InGest-LLM services...")
+    await ingestor.stop()
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    logger.info("Services stopped.")
 
 def create_app() -> FastAPI:
     """Create the FastAPI application.
@@ -29,6 +65,7 @@ def create_app() -> FastAPI:
         description="A microservice for ingesting data into the ApexSigma ecosystem.",
         version=settings.app_version,
         debug=settings.debug,
+        lifespan=lifespan,
     )
 
     # Include API routers

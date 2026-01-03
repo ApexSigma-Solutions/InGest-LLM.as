@@ -59,8 +59,30 @@ class Settings(BaseSettings):
     embedding_batch_size: int = Field(default=10, description="Embedding batch size")
     embedding_dimension: int = Field(default=768, description="Embedding dimension (default for nomic-embed)")
 
+    # --- Neo4j Config ---
+    neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j URI")
+    neo4j_user: str = Field(default="neo4j", description="Neo4j User")
+    neo4j_password: str = Field(default="password", description="Neo4j Password")
+
     # Logging (observability stack removed; keep basic log level control)
     log_level: str = Field(default="INFO", description="Log level")
+
+    # --- LLM Summarization Config ---
+    llm_provider: str = Field(default="ollama", description="LLM provider: 'ollama' or 'openai'")
+    ollama_base_url: str = Field(default="http://localhost:11434/v1", description="Ollama Base URL (OpenAI compatible)")
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API Key")
+    # For Ollama, the model might be 'llama3' or 'mistral'. For OpenAI, 'gpt-4o'.
+    summarization_model: str = Field(default="llama3.1", description="Model used for summarization")
+
+    # --- Database Config ---
+    # Connection string to the Ingest Database (where raw_conversations live)
+    # Defaulting to the known local value or override via env INGEST_RAW_DB_URL
+    raw_db_url: str = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/ingest_db",
+        description="Connection string for Ingest Database"
+    )
+    # Vault Path for writing summaries
+    obsidian_vault_path: str = Field(default="C:/Users/steyn/Documents/Obsidian Vault", description="Path to Obsidian Vault")
 
     model_config = SettingsConfigDict(
         env_file=".env",

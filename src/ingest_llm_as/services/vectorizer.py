@@ -21,11 +21,11 @@ logger = get_logger(__name__)
 
 
 class EmbeddingModelType(str, Enum):
-    """Available embedding models in LM Studio."""
+    """Available embedding models in LM Studio/Ollama."""
 
-    TEXT = "text-embedding-nomic-embed-text-v1.5@q5_k_m"  # Your current model
-    CODE = "nomic-embed-code-v1"
-    GENERAL = "text-embedding-nomic-embed-text-v1.5@q5_k_m"  # Use your current model as fallback
+    TEXT = "bge-m3"  # User specified model
+    CODE = "bge-m3"  # Fallback
+    GENERAL = "bge-m3"  # Fallback
 
 
 class VectorizerError(Exception):
@@ -150,6 +150,17 @@ class LMStudioVectorizer:
         available_models = self.get_available_models()
         selected_model = None
         selection_reason = ""
+        
+        # Helper for partial matching
+        def find_matching_model(target: str) -> Optional[str]:
+            # Try exact match
+            if target in available_models:
+                return target
+            # Try partial match (e.g. "bge-m3" matches "bge-m3:567m" or "bge-m3:latest")
+            for model in available_models:
+                if model.startswith(target) or target in model:
+                    return model
+            return None
 
         # Priority selection based on content analysis
         if content_type.lower() in [
@@ -159,16 +170,19 @@ class LMStudioVectorizer:
             "json",
         ] or (detected_type and detected_type.lower() in ["code", "python"]):
             # Prefer code-specialized model
-            if EmbeddingModelType.CODE.value in available_models:
-                selected_model = EmbeddingModelType.CODE.value
+            match = find_matching_model(EmbeddingModelType.CODE.value)
+            if match:
+                selected_model = match
                 selection_reason = "code_specialized_model_available"
                 logger.debug(f"Selected {selected_model} for code content")
 
         # For text, documentation, markdown
-        if not selected_model and EmbeddingModelType.TEXT.value in available_models:
-            selected_model = EmbeddingModelType.TEXT.value
-            selection_reason = "text_specialized_model_available"
-            logger.debug(f"Selected {selected_model} for text content")
+        if not selected_model:
+            match = find_matching_model(EmbeddingModelType.TEXT.value)
+            if match:
+                selected_model = match
+                selection_reason = "text_specialized_model_available"
+                logger.debug(f"Selected {selected_model} for text content")
 
         # Fallback to first available model
         if not selected_model and available_models:
