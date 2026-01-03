@@ -24,6 +24,7 @@ class ContentType(str, Enum):
     DOCUMENTATION = "documentation"
     MARKDOWN = "markdown"
     JSON = "json"
+    WORKING_EXPERIENCE = "working_experience"
 
 
 class SourceType(str, Enum):
@@ -34,6 +35,7 @@ class SourceType(str, Enum):
     UPLOAD = "upload"
     WEB_SCRAPE = "web_scrape"
     REPOSITORY = "repository"
+    MEMOS_MCP = "memos-mcp"
 
 
 class IngestionMetadata(BaseModel):
@@ -79,6 +81,22 @@ class IngestionRequest(BaseModel):
         if not stripped:
             raise ValueError("Content cannot be empty or whitespace only")
         return stripped
+
+
+class WorkingExperienceRequest(BaseModel):
+    """Request model for working experience promotion from memOS.MCP."""
+
+    source: SourceType = SourceType.MEMOS_MCP
+    type: ContentType = ContentType.WORKING_EXPERIENCE
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=1_000_000,
+        description="The experience content",
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Context metadata (session_id, significance, etc.)"
+    )
 
 
 class MemoryTier(str, Enum):

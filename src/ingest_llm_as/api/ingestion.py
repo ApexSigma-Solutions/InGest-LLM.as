@@ -19,6 +19,10 @@ from ..models import (
     IngestionResult,
     ProcessingStatus,
     MemoryTier,
+    WorkingExperienceRequest,
+    IngestionMetadata,
+    SourceType,
+    ContentType,
 )
 from ..observability.langfuse_client import get_langfuse_client
 from ..observability.logging import (
@@ -283,6 +287,122 @@ async def ingest_text(
         raise HTTPException(
             status_code=500, detail="Internal server error during ingestion"
         )
+
+
+
+@router.post("/experience", response_model=IngestionResponse)
+async def ingest_experience(
+    request: WorkingExperienceRequest,
+    memos_client: MemOSClient = Depends(get_memos_client),
+) -> IngestionResponse:
+    """
+    Ingest a working experience promoted from memOS.MCP.
+
+    This endpoint handles structured experience data from the memOS bridge,
+    processing it as a high-priority semantic memory.
+    """
+    print("DEBUG ingest_experience: Endpoint called")
+    start_time = time.time()
+    ingestion_id = uuid4()
+
+    # Create standardized metadata
+    metadata = IngestionMetadata(
+        source=request.source,
+        content_type=request.type,
+        custom_fields=request.metadata,
+        title=f"Experience from {request.metadata.get('session_id', 'unknown')}",
+        tags=["working-experience", "promotion"]
+    )
+
+    # Convert to IngestionRequest for consistent processing
+    ingestion_req = IngestionRequest(
+        content=request.content,
+        metadata=metadata,
+        process_async=False # Force sync for promotion feedback
+    )
+
+    # Initialize Langfuse tracing
+    langfuse_client = get_langfuse_client()
+    trace_id = None
+
+    if langfuse_client.enabled:
+        trace_id = langfuse_client.create_trace(
+            name="experience_ingestion",
+            metadata={
+                "ingestion_id": str(ingestion_id),
+                "content_type": request.type.value,
+                "session_id": request.metadata.get("session_id"),
+                "source": request.source.value,
+            },
+            tags=["ingestion", "experience", "memos-mcp"],
+            input_data={
+                "content": request.content,
+                "metadata": request.metadata,
+            },
+        )
+
+    # Record metrics
+    log_ingestion_start(
+        logger,
+        str(ingestion_id),
+        request.type.value,
+        len(request.content),
+        request.metadata,
+    )
+
+    try:
+        # Initialize processor
+        processor = ContentProcessor()
+
+        # Process content (generate embeddings)
+        # Experience is treated as text/semantic
+        processing_result = await processor.process_content_with_embeddings(
+            content=request.content,
+            content_type=request.type.value,
+            detected_type="text", # Always treat as text for now
+        )
+
+        chunks = processing_result["chunks"]
+        embeddings = processing_result["embeddings"]
+
+        if not chunks:
+             raise HTTPException(status_code=400, detail="No content chunks created")
+
+        # Process Synchronously
+        results = await _process_chunks_sync(
+            chunks, embeddings, ingestion_req, processor, memos_client
+        )
+
+        # Determine status
+        failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
+        overall_status = (
+            ProcessingStatus.FAILED if failed_results else ProcessingStatus.COMPLETED
+        )
+
+        response = IngestionResponse(
+            ingestion_id=ingestion_id,
+            status=overall_status,
+            total_chunks=len(chunks),
+            results=results,
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            message=f"Promoted {len(results)} chunks to memory"
+        )
+
+        # Log completion
+        duration_ms = int((time.time() - start_time) * 1000)
+        log_ingestion_complete(
+            logger,
+            str(ingestion_id),
+            response.status.value,
+            duration_ms,
+            len(results),
+        )
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Error in ingest_experience: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def _process_chunks_sync(
