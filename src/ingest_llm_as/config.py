@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     memos_api_key: Optional[str] = Field(default=None, description="memOS API key")
     memos_timeout: int = Field(default=30, description="memOS API timeout in seconds")
 
+    # Webhook Secrets
+    linear_webhook_secret: Optional[str] = Field(default=None, description="Linear Webhook Secret", validation_alias="LINEAR_WEBHOOK_SECRET")
+    github_webhook_secret: Optional[str] = Field(default=None, description="GitHub Webhook Secret", validation_alias="GITHUB_WEBHOOK_SECRET")
+
     # Processing limits
     max_content_size: int = Field(default=1_000_000, description="Max content size in bytes (1MB)")
     default_chunk_size: int = Field(default=1000, description="Default chunk size")

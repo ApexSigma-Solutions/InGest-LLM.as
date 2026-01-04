@@ -99,7 +99,14 @@ def get_webhook_secret() -> Optional[str]:
     Returns:
         Optional[str]: Secret value or None if not configured
     """
-    secret = os.getenv("LINEAR_WEBHOOK_SECRET")
+    from ..config import get_settings
+
+    settings = get_settings()
+    secret = settings.linear_webhook_secret
+    if not secret:
+        # Fallback to os.getenv just in case
+        secret = os.getenv("LINEAR_WEBHOOK_SECRET")
+
     if not secret:
         logger.warning("LINEAR_WEBHOOK_SECRET environment variable not set")
     return secret

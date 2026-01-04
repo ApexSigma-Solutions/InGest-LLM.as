@@ -95,7 +95,14 @@ def get_webhook_secret() -> Optional[str]:
     Returns:
         Optional[str]: Secret value or None if not configured
     """
-    secret = os.getenv("GITHUB_WEBHOOK_SECRET")
+    from ..config import get_settings
+    
+    settings = get_settings()
+    secret = settings.github_webhook_secret
+    if not secret:
+        # Fallback to os.getenv just in case, or for legacy support
+        secret = os.getenv("GITHUB_WEBHOOK_SECRET")
+        
     if not secret:
         logger.warning("GITHUB_WEBHOOK_SECRET environment variable not set")
     return secret

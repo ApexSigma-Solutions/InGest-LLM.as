@@ -28,10 +28,11 @@ from ..core.metrics import (
 
 logger = logging.getLogger(__name__)
 
+from ..config import get_settings
+
 # Initialize circuit breaker
 CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "3"))
 CIRCUIT_BREAKER_TIMEOUT = int(os.getenv("CIRCUIT_BREAKER_TIMEOUT", "300"))
-POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
 
 circuit_breaker = CircuitBreaker(
     failure_threshold=CIRCUIT_BREAKER_THRESHOLD,
@@ -45,7 +46,15 @@ github_circuit_breaker = CircuitBreaker(
     name="github_webhook",
 )
 
-saga = SagaOrchestrator(postgres_dsn=POSTGRES_DSN)
+settings = get_settings()
+# Use raw_db_url but ensure it's compatible with asyncpg pure (no +asyncpg) if needed
+# Actually SagaOrchestrator takes postgres_dsn. If raw_db_url has +asyncpg, asyncpg might strictly require postgresql://
+# The app's ConversationIngestor does a replace on line 48: .replace("postgresql+asyncpg", "postgresql")
+# We should replicate that safety or fix it in SagaOrchestrator.
+# Looking at SagaOrchestrator (viewed earlier), it just takes dsn.
+# Let's clean the DSN here to be safe.
+clean_dsn = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
+saga = SagaOrchestrator(postgres_dsn=clean_dsn)
 
 router = APIRouter(tags=["webhook"])
 
@@ -72,135 +81,140 @@ async def receive_linear_webhook(request: Request) -> Dict[str, Any]:
     correlation_id = str(uuid.uuid4())
     start_time = time.time()
 
-    # Extract headers
-    signature = request.headers.get("Linear-Signature", "")
-    request_id = request.headers.get("X-Request-ID", correlation_id)
-
-    logger.info(
-        "Linear webhook received",
-        extra={
-            "correlation_id": correlation_id,
-            "request_id": request_id,
-            "signature_present": bool(signature),
-        },
-    )
-
-    # Check circuit breaker state
-    if not circuit_breaker.is_closed():
-        cb_status = circuit_breaker.get_status()
-        logger.warning(
-            "Circuit breaker is OPEN, rejecting request",
-            extra={
-                "correlation_id": correlation_id,
-                "circuit_breaker_status": cb_status,
-            },
-        )
-
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/linear",
-            status="503",
-            duration_seconds=time.time() - start_time,
-        )
-
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Service Unavailable",
-                "message": "Circuit breaker is open",
-                "correlation_id": correlation_id,
-                "circuit_breaker": cb_status,
-            },
-        )
-
-    # Read payload
     try:
-        payload_bytes = await request.body()
-        payload = await request.json()
-    except Exception as e:
-        logger.error(
-            "Failed to read webhook payload",
+        # Extract headers
+        signature = request.headers.get("Linear-Signature", "")
+        request_id = request.headers.get("X-Request-ID", correlation_id)
+
+        logger.info(
+            "Linear webhook received",
             extra={
                 "correlation_id": correlation_id,
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-            },
-            exc_info=True,
-        )
-
-        circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/linear",
-            status="400",
-            duration_seconds=time.time() - start_time,
-        )
-
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Bad Request",
-                "message": "Invalid payload format",
-                "correlation_id": correlation_id,
+                "request_id": request_id,
+                "signature_present": bool(signature),
             },
         )
 
-    # Begin saga transaction
-    await saga.begin_transaction(payload)
+        # Check circuit breaker state
+        if not circuit_breaker.is_closed():
+            cb_status = circuit_breaker.get_status()
+            logger.warning(
+                "Circuit breaker is OPEN, rejecting request",
+                extra={
+                    "correlation_id": correlation_id,
+                    "circuit_breaker_status": cb_status,
+                },
+            )
 
-    # Verify signature
-    secret = get_webhook_secret()
-    if not secret:
-        logger.error(
-            "LINEAR_WEBHOOK_SECRET not configured",
-            extra={"correlation_id": correlation_id},
-        )
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/linear",
+                status="503",
+                duration_seconds=time.time() - start_time,
+            )
 
-        circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/linear",
-            status="500",
-            duration_seconds=time.time() - start_time,
-        )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "Service Unavailable",
+                    "message": "Circuit breaker is open",
+                    "correlation_id": correlation_id,
+                    "circuit_breaker": cb_status,
+                },
+            )
 
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Internal Server Error",
-                "message": "Webhook secret not configured",
-                "correlation_id": correlation_id,
-            },
-        )
+        # Read payload
+        try:
+            payload_bytes = await request.body()
+            payload = await request.json()
+        except Exception as e:
+            logger.error(
+                "Failed to read webhook payload",
+                extra={
+                    "correlation_id": correlation_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True,
+            )
 
-    if not verify_signature(payload_bytes, signature, secret):
-        logger.warning(
-            "Invalid webhook signature",
-            extra={
-                "correlation_id": correlation_id,
-                "signature": signature[:16] + "...",
-            },
-        )
+            circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/linear",
+                status="400",
+                duration_seconds=time.time() - start_time,
+            )
 
-        circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/linear",
-            status="401",
-            duration_seconds=time.time() - start_time,
-        )
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Bad Request",
+                    "message": "Invalid payload format",
+                    "correlation_id": correlation_id,
+                },
+            )
 
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": "Unauthorized",
-                "message": "Invalid webhook signature",
-                "correlation_id": correlation_id,
-            },
-        )
+        # Begin saga transaction
+        await saga.begin_transaction(payload)
 
-    # Process webhook payload
-    try:
+        # Verify signature
+        try:
+            secret = get_webhook_secret()
+        except Exception as e:
+            logger.error(f"Error retrieving user secret: {e}", exc_info=True)
+            secret = None
+
+        if not secret:
+            logger.error(
+                "LINEAR_WEBHOOK_SECRET not configured",
+                extra={"correlation_id": correlation_id},
+            )
+
+            circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/linear",
+                status="500",
+                duration_seconds=time.time() - start_time,
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Internal Server Error",
+                    "message": "Webhook secret not configured",
+                    "correlation_id": correlation_id,
+                },
+            )
+
+        if not verify_signature(payload_bytes, signature, secret):
+            logger.warning(
+                "Invalid webhook signature",
+                extra={
+                    "correlation_id": correlation_id,
+                    "signature": signature[:16] + "...",
+                },
+            )
+
+            circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/linear",
+                status="401",
+                duration_seconds=time.time() - start_time,
+            )
+
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "Unauthorized",
+                    "message": "Invalid webhook signature",
+                    "correlation_id": correlation_id,
+                },
+            )
+
+        # Process webhook payload
         result = await _process_webhook_payload(payload, correlation_id)
         await saga.commit_transaction(payload)
 
@@ -229,6 +243,10 @@ async def receive_linear_webhook(request: Request) -> Dict[str, Any]:
             "message": "Webhook received and queued for processing",
         }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+
     except Exception as e:
         logger.error(
             "Failed to process webhook payload",
@@ -241,23 +259,27 @@ async def receive_linear_webhook(request: Request) -> Dict[str, Any]:
         )
 
         # Write to DLQ
-        if POSTGRES_DSN:
-            dlq_id = await write_to_dlq(
-                payload=payload,
-                error_message=str(e),
-                correlation_id=correlation_id,
-                postgres_dsn=POSTGRES_DSN,
-            )
+        if clean_dsn:
+            try:
+                if 'payload' in locals():
+                    dlq_id = await write_to_dlq(
+                        payload=payload,
+                        error_message=str(e),
+                        correlation_id=correlation_id,
+                        postgres_dsn=clean_dsn,
+                    )
 
-            if dlq_id:
-                record_dlq_message(service="ingest-llm")
-                logger.info(
-                    "Payload written to DLQ",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "dlq_id": dlq_id,
-                    },
-                )
+                    if dlq_id:
+                        record_dlq_message(service="ingest-llm")
+                        logger.info(
+                            "Payload written to DLQ",
+                            extra={
+                                "correlation_id": correlation_id,
+                                "dlq_id": dlq_id,
+                            },
+                        )
+            except Exception as dlq_error:
+                 logger.error(f"Failed to write to DLQ: {dlq_error}")
 
         # Record failure
         circuit_breaker.record_failure()
@@ -272,7 +294,7 @@ async def receive_linear_webhook(request: Request) -> Dict[str, Any]:
             status_code=500,
             detail={
                 "error": "Internal Server Error",
-                "message": "Failed to process webhook",
+                "message": f"Failed to process webhook: {str(e)}",
                 "correlation_id": correlation_id,
             },
         )
@@ -300,135 +322,140 @@ async def receive_github_webhook(request: Request) -> Dict[str, Any]:
     correlation_id = str(uuid.uuid4())
     start_time = time.time()
 
-    # Extract headers
-    signature = request.headers.get("X-Hub-Signature-256", "")
-    request_id = request.headers.get("X-GitHub-Delivery", correlation_id)
-
-    logger.info(
-        "GitHub webhook received",
-        extra={
-            "correlation_id": correlation_id,
-            "request_id": request_id,
-            "signature_present": bool(signature),
-        },
-    )
-
-    # Check circuit breaker state
-    if not github_circuit_breaker.is_closed():
-        cb_status = github_circuit_breaker.get_status()
-        logger.warning(
-            "GitHub Circuit breaker is OPEN, rejecting request",
-            extra={
-                "correlation_id": correlation_id,
-                "circuit_breaker_status": cb_status,
-            },
-        )
-
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/github",
-            status="503",
-            duration_seconds=time.time() - start_time,
-        )
-
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Service Unavailable",
-                "message": "Circuit breaker is open",
-                "correlation_id": correlation_id,
-                "circuit_breaker": cb_status,
-            },
-        )
-
-    # Read payload
     try:
-        payload_bytes = await request.body()
-        payload = await request.json()
-    except Exception as e:
-        logger.error(
-            "Failed to read GitHub webhook payload",
+        # Extract headers
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        request_id = request.headers.get("X-GitHub-Delivery", correlation_id)
+
+        logger.info(
+            "GitHub webhook received",
             extra={
                 "correlation_id": correlation_id,
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-            },
-            exc_info=True,
-        )
-
-        github_circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/github",
-            status="400",
-            duration_seconds=time.time() - start_time,
-        )
-
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Bad Request",
-                "message": "Invalid payload format",
-                "correlation_id": correlation_id,
+                "request_id": request_id,
+                "signature_present": bool(signature),
             },
         )
 
-    # Begin saga transaction
-    await saga.begin_transaction(payload)
+        # Check circuit breaker state
+        if not github_circuit_breaker.is_closed():
+            cb_status = github_circuit_breaker.get_status()
+            logger.warning(
+                "GitHub Circuit breaker is OPEN, rejecting request",
+                extra={
+                    "correlation_id": correlation_id,
+                    "circuit_breaker_status": cb_status,
+                },
+            )
 
-    # Verify signature
-    secret = github_webhook.get_webhook_secret()
-    if not secret:
-        logger.error(
-            "GITHUB_WEBHOOK_SECRET not configured",
-            extra={"correlation_id": correlation_id},
-        )
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/github",
+                status="503",
+                duration_seconds=time.time() - start_time,
+            )
 
-        github_circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/github",
-            status="500",
-            duration_seconds=time.time() - start_time,
-        )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "Service Unavailable",
+                    "message": "Circuit breaker is open",
+                    "correlation_id": correlation_id,
+                    "circuit_breaker": cb_status,
+                },
+            )
 
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Internal Server Error",
-                "message": "Webhook secret not configured",
-                "correlation_id": correlation_id,
-            },
-        )
+        # Read payload
+        try:
+            payload_bytes = await request.body()
+            payload = await request.json()
+        except Exception as e:
+            logger.error(
+                "Failed to read GitHub webhook payload",
+                extra={
+                    "correlation_id": correlation_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True,
+            )
 
-    if not github_webhook.verify_signature(payload_bytes, signature, secret):
-        logger.warning(
-            "Invalid GitHub webhook signature",
-            extra={
-                "correlation_id": correlation_id,
-                "signature": signature[:16] + "...",
-            },
-        )
+            github_circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/github",
+                status="400",
+                duration_seconds=time.time() - start_time,
+            )
 
-        github_circuit_breaker.record_failure()
-        record_webhook_request(
-            service="ingest-llm",
-            endpoint="/webhook/github",
-            status="401",
-            duration_seconds=time.time() - start_time,
-        )
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Bad Request",
+                    "message": "Invalid payload format",
+                    "correlation_id": correlation_id,
+                },
+            )
 
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": "Unauthorized",
-                "message": "Invalid webhook signature",
-                "correlation_id": correlation_id,
-            },
-        )
+        # Begin saga transaction
+        await saga.begin_transaction(payload)
 
-    # Process webhook payload
-    try:
+        # Verify signature
+        try:
+            secret = github_webhook.get_webhook_secret()
+        except Exception as e:
+            logger.error(f"Error retrieving secret: {e}", exc_info=True)
+            secret = None
+
+        if not secret:
+            logger.error(
+                "GITHUB_WEBHOOK_SECRET not configured",
+                extra={"correlation_id": correlation_id},
+            )
+
+            github_circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/github",
+                status="500",
+                duration_seconds=time.time() - start_time,
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Internal Server Error",
+                    "message": "Webhook secret not configured",
+                    "correlation_id": correlation_id,
+                },
+            )
+
+        if not github_webhook.verify_signature(payload_bytes, signature, secret):
+            logger.warning(
+                "Invalid GitHub webhook signature",
+                extra={
+                    "correlation_id": correlation_id,
+                    "signature": signature[:16] + "...",
+                },
+            )
+
+            github_circuit_breaker.record_failure()
+            record_webhook_request(
+                service="ingest-llm",
+                endpoint="/webhook/github",
+                status="401",
+                duration_seconds=time.time() - start_time,
+            )
+
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "Unauthorized",
+                    "message": "Invalid webhook signature",
+                    "correlation_id": correlation_id,
+                },
+            )
+
+        # Process webhook payload
         await _process_github_webhook_payload(payload, correlation_id)
         await saga.commit_transaction(payload)
 
@@ -457,6 +484,10 @@ async def receive_github_webhook(request: Request) -> Dict[str, Any]:
             "message": "Webhook received and queued for processing",
         }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+
     except Exception as e:
         logger.error(
             "Failed to process GitHub webhook payload",
@@ -469,23 +500,31 @@ async def receive_github_webhook(request: Request) -> Dict[str, Any]:
         )
 
         # Write to DLQ
-        if POSTGRES_DSN:
-            dlq_id = await write_to_dlq(
-                payload=payload,
-                error_message=str(e),
-                correlation_id=correlation_id,
-                postgres_dsn=POSTGRES_DSN,
-            )
+        if clean_dsn:
+            try:
+                # Need to handle potential UnboundLocalError for payload if reading failed totally
+                # But we caught reading error earlier, so payload exists if we got here?
+                # Actually if reading failed we raised HTTPException, so we are safe.
+                # However, if 'payload' is not defined (e.g. error before reading), we need check.
+                if 'payload' in locals():
+                    dlq_id = await write_to_dlq(
+                        payload=payload,
+                        error_message=str(e),
+                        correlation_id=correlation_id,
+                        postgres_dsn=clean_dsn,
+                    )
 
-            if dlq_id:
-                record_dlq_message(service="ingest-llm")
-                logger.info(
-                    "Payload written to DLQ",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "dlq_id": dlq_id,
-                    },
-                )
+                    if dlq_id:
+                        record_dlq_message(service="ingest-llm")
+                        logger.info(
+                            "Payload written to DLQ",
+                            extra={
+                                "correlation_id": correlation_id,
+                                "dlq_id": dlq_id,
+                            },
+                        )
+            except Exception as dlq_error:
+                logger.error(f"Failed to write to DLQ: {dlq_error}")
 
         # Record failure
         github_circuit_breaker.record_failure()
@@ -500,7 +539,7 @@ async def receive_github_webhook(request: Request) -> Dict[str, Any]:
             status_code=500,
             detail={
                 "error": "Internal Server Error",
-                "message": "Failed to process webhook",
+                "message": f"Failed to process webhook: {str(e)}",
                 "correlation_id": correlation_id,
             },
         )

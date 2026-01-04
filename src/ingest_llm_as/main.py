@@ -13,6 +13,7 @@ from .api.omega_ingest import router as omega_ingest_router
 
 from .routers.eod_logs import router as eod_logs_router
 from .routers.webhook_forwarder import router as webhook_forwarder_router
+from .routers.webhook import router as webhook_router
 from .observability.logging import get_logger
 from ingest_llm_as.processors.conversation_ingestor import ConversationIngestor
 
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(omega_ingest_router)
     app.include_router(eod_logs_router)
     app.include_router(webhook_forwarder_router)
+    app.include_router(webhook_router)
 
     @app.get("/", response_model=dict)
     def read_root():
