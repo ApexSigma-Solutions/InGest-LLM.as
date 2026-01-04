@@ -36,7 +36,7 @@ poetry run pytest -m "not integration"  # Skip integration tests
 poetry run pytest tests/test_memos_integration_core.py -v
 
 # Core integration runner (checks /health first)
-python scripts/run_core_integration_tests.py
+python scripts/testing/test-core-integration.py
 ```
 
 ## Docker
@@ -59,7 +59,7 @@ docker run -p 8000:8000 ingest-llm-as
 | [ecosystem.py](src/ingest_llm_as/api/ecosystem.py) | Project ecosystem analysis endpoints |
 | [analysis.py](src/ingest_llm_as/api/analysis.py) | Project analysis endpoints |
 | [omega_ingest.py](src/ingest_llm_as/api/omega_ingest.py) | Omega-flavored ingestion endpoints |
-| [eod_logs.py](src/ingest_llm_as/routers/eod_logs.py) | End-of-day logging router |
+| [eod_logs.py](src/ingest_llm_as/api/eod_logs.py) | End-of-day logging router |
 
 ### Core Processing Pipeline
 1. **Content Processing** ([content_processor.py](src/ingest_llm_as/utils/content_processor.py)):
