@@ -10,7 +10,9 @@ import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import asyncpg
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 
 from ..config import settings
 from ..models import (
@@ -24,6 +26,12 @@ from ..models import (
     SourceType,
     ContentType,
 )
+
+class QueueStatus(BaseModel):
+    pending_count: int
+    processed_count: int
+    total_count: int
+    oldest_pending_age_seconds: Optional[float]
 from ..observability.langfuse_client import get_langfuse_client
 from ..observability.logging import (
     get_logger,
@@ -290,11 +298,75 @@ async def ingest_text(
 
 
 
-@router.post("/experience", response_model=IngestionResponse)
-async def ingest_experience(
-    request: WorkingExperienceRequest,
+
+@router.post("/file", response_model=IngestionResponse)
+async def ingest_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> IngestionResponse:
+    """
+    Ingest a file (PDF, Text, Markdown) into the memory system.
+    """
+    start_time = time.time()
+    ingestion_id = uuid4()
+    
+    try:
+        content_bytes = await file.read()
+        filename = file.filename or "unknown"
+        processor = ContentProcessor()
+        
+        if filename.lower().endswith(".pdf"):
+            # Process PDF
+            processing_result = await processor.process_pdf_content(content_bytes, filename)
+        else:
+            # Process as text
+            text_content = content_bytes.decode("utf-8")
+            processing_result = await processor.process_content_with_embeddings(
+                content=text_content,
+                content_type="documentation",
+                detected_type="text"
+            )
+            
+        chunks = processing_result["chunks"]
+        embeddings = processing_result["embeddings"]
+        
+        # Create metadata
+        metadata = IngestionMetadata(
+            source=SourceType.USER_UPLOAD,
+            content_type=ContentType.DOCUMENTATION,
+            source_url=filename,
+            title=filename
+        )
+        
+        request = IngestionRequest(
+            content="[FILE CONTENT]", # identifying placeholder
+            metadata=metadata,
+            process_async=False
+        )
+        
+        # Process chunks synchronously
+        results = await _process_chunks_sync(
+            chunks, embeddings, request, processor, memos_client
+        )
+        
+        failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
+        overall_status = (
+            ProcessingStatus.FAILED if failed_results else ProcessingStatus.COMPLETED
+        )
+        
+        return IngestionResponse(
+            ingestion_id=ingestion_id,
+            status=overall_status,
+            total_chunks=len(chunks),
+            results=results,
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            message=f"Processed file {filename}: {len(results)} chunks"
+        )
+        
+    except Exception as e:
+        logger.error(f"File ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     """
     Ingest a working experience promoted from memOS.MCP.
 
@@ -612,6 +684,38 @@ def _determine_memory_tier(content_type) -> MemoryTier:
     }
 
     return tier_mapping.get(ct_str, MemoryTier.SEMANTIC)
+
+
+
+@router.get("/queue", response_model=QueueStatus)
+async def get_queue_status():
+    """
+    Get current status of the conversation ingestion queue.
+    """
+    db_url = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
+    conn = await asyncpg.connect(db_url)
+    try:
+        # Get counts
+        stats = await conn.fetchrow("""
+            SELECT 
+                COUNT(*) FILTER (WHERE processed = FALSE) as pending,
+                COUNT(*) FILTER (WHERE processed = TRUE) as processed,
+                COUNT(*) as total,
+                EXTRACT(EPOCH FROM (NOW() - MIN(captured_at))) FILTER (WHERE processed = FALSE) as oldest_age
+            FROM raw_conversations
+        """)
+        
+        return QueueStatus(
+            pending_count=stats['pending'] or 0,
+            processed_count=stats['processed'] or 0,
+            total_count=stats['total'] or 0,
+            oldest_pending_age_seconds=stats['oldest_age']
+        )
+    except Exception as e:
+        logger.error(f"Queue status check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await conn.close()
 
 
 @router.get("/status/{ingestion_id}")

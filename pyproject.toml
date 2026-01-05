@@ -30,6 +30,8 @@ poml = ">=0.0.7,<0.0.8"
 urllib3 = ">=2.6.0"
 asyncpg = "^0.29.0"
 neo4j = "^5.20.0"
+pymupdf = "^1.26.7"
+python-multipart = "^0.0.21"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.0"

@@ -47,23 +47,61 @@ class ContentProcessor:
     def clean_content(self, content: str) -> str:
         """
         Clean and normalize content for processing.
-
+        
         Args:
             content: Raw content string
-
+            
         Returns:
             str: Cleaned content
         """
         # Strip whitespace
         cleaned = content.strip()
-
+        
         # Normalize whitespace (multiple spaces/newlines to single)
         cleaned = re.sub(r"\s+", " ", cleaned)
-
+        
         # Remove control characters except newlines and tabs
         cleaned = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", cleaned)
-
+        
         return cleaned
+
+    async def process_pdf_content(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+        """
+        Extract text from PDF content using PyMuPDF.
+        
+        Args:
+            file_content: Raw PDF bytes
+            filename: Original filename
+            
+        Returns:
+            Dict containing processed content and metadata
+        """
+        import fitz  # PyMuPDF
+        
+        start_time = time.time()
+        text_content = []
+        metadata = {"page_count": 0, "author": "", "title": "", "subject": ""}
+        
+        try:
+            with fitz.open(stream=file_content, filetype="pdf") as doc:
+                metadata["page_count"] = len(doc)
+                metadata.update(doc.metadata)
+                
+                for page in doc:
+                    text_content.append(page.get_text())
+                    
+            full_text = "\n\n".join(text_content)
+            
+            # Process as standard content
+            return await self.process_content_with_embeddings(
+                content=full_text,
+                content_type="documentation",
+                detected_type="pdf"
+            )
+            
+        except Exception as e:
+            logger.error(f"PDF processing failed for {filename}: {e}")
+            raise ValueError(f"Failed to process PDF: {str(e)}")
 
     def chunk_content(self, content: str, chunk_size: int = None) -> List[str]:
         """
