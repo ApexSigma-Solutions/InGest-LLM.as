@@ -374,6 +374,17 @@ async def ingest_file(
     This endpoint handles structured experience data from the memOS bridge,
     processing it as a high-priority semantic memory.
     """
+
+
+@router.post("/experience", response_model=IngestionResponse)
+async def ingest_experience(
+    request: WorkingExperienceRequest,
+    background_tasks: BackgroundTasks,
+    memos_client: MemOSClient = Depends(get_memos_client),
+) -> IngestionResponse:
+    """
+    Ingest a working experience promoted from memOS.MCP.
+    """
     print("DEBUG ingest_experience: Endpoint called")
     start_time = time.time()
     ingestion_id = uuid4()
