@@ -59,8 +59,24 @@ if (Test-Path $EnvPath) {
 $UvicornPort = 8766
 Write-Output "[$Time] Checking Uvicorn API Server status (port $UvicornPort)..."
 
-$PoetryPath = (Get-Command poetry -ErrorAction SilentlyContinue).Source
-if (-not $PoetryPath) { $PoetryPath = "poetry" }
+$PoetryCommand = Get-Command poetry -ErrorAction SilentlyContinue
+$SystemPython = "C:\Program Files\Python312\python.exe"
+
+if ($PoetryCommand) {
+    $PoetryPath = $PoetryCommand.Source
+    $PoetryPrefix = ""
+} elseif (Test-Path $SystemPython) {
+    $PoetryPath = $SystemPython
+    $PoetryPrefix = "-m poetry "
+} else {
+    $PoetryPath = "python"
+    $PoetryPrefix = "-m poetry "
+}
+
+# Set PYTHONPATH to include src/ directory for module resolution
+$PythonPath = Join-Path $ProjectRoot "src"
+[Environment]::SetEnvironmentVariable("PYTHONPATH", $PythonPath, "Process")
+Write-Output "   [i] PYTHONPATH set to: $PythonPath"
 
 $UvicornArgs = "run uvicorn ingest_llm_as.main:app --port $UvicornPort --reload"
 

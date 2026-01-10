@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # --- Neo4j Config ---
     neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j URI")
     neo4j_user: str = Field(default="neo4j", description="Neo4j User")
-    neo4j_password: str = Field(default="password", description="Neo4j Password")
+    neo4j_password: str = Field(default="aDQUU5$@1dpuj5", description="Neo4j Password")
 
     # Logging (observability stack removed; keep basic log level control)
     log_level: str = Field(default="INFO", description="Log level")
