@@ -55,7 +55,47 @@ if (Test-Path $EnvPath) {
     }
 }
 
-# --- 3. START UVICORN API SERVER ---
+# --- 3. BOOTSTRAP NLP DEPENDENCIES ---
+Write-Output "[$Time] Bootstrapping NLP dependencies (Spacy + NLTK)..."
+$BootstrapScript = Join-Path $ProjectRoot "bootstrap.py"
+
+if (Test-Path $BootstrapScript) {
+    try {
+        $PoetryCommand = Get-Command poetry -ErrorAction SilentlyContinue
+        $SystemPython = "C:\Program Files\Python312\python.exe"
+        
+        if ($PoetryCommand) {
+            $BootstrapExecutor = $PoetryCommand.Source
+            $BootstrapArgs = "run python bootstrap.py"
+        } elseif (Test-Path $SystemPython) {
+            $BootstrapExecutor = $SystemPython
+            $BootstrapArgs = "-m poetry run python bootstrap.py"
+        } else {
+            $BootstrapExecutor = "python"
+            $BootstrapArgs = "-m poetry run python bootstrap.py"
+        }
+        
+        $BootstrapResult = Start-Process -FilePath $BootstrapExecutor `
+            -ArgumentList $BootstrapArgs `
+            -WorkingDirectory $ProjectRoot `
+            -Wait `
+            -PassThru `
+            -NoNewWindow
+        
+        if ($BootstrapResult.ExitCode -eq 0) {
+            Write-Output "   [✅] NLP dependencies verified/installed successfully"
+        } else {
+            Write-Warning "   [⚠️] Bootstrap completed with warnings (exit code: $($BootstrapResult.ExitCode))"
+        }
+    } catch {
+        Write-Warning "   [⚠️] Bootstrap failed: $($_.Exception.Message)"
+        Write-Output "   [i] Continuing anyway - service may fail if dependencies are missing"
+    }
+} else {
+    Write-Output "   [i] Bootstrap script not found - skipping dependency check"
+}
+
+# --- 4. START UVICORN API SERVER ---
 $UvicornPort = 8766
 Write-Output "[$Time] Checking Uvicorn API Server status (port $UvicornPort)..."
 
@@ -115,7 +155,7 @@ if ($ExistingUvicorn) {
     }
 }
 
-# --- 4. START CLOUDFLARED TUNNEL ---
+# --- 5. START CLOUDFLARED TUNNEL ---
 Write-Output "[$Time] Checking Cloudflared Tunnel status..."
 
 $CloudflaredPath = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
@@ -162,7 +202,7 @@ if (-not $CloudflaredPath) {
     }
 }
 
-# --- 5. SUMMARY ---
+# --- 6. SUMMARY ---
 Write-Output ""
 Write-Output "=" * 70
 Write-Output "InGest-LLM.as Stack Status"
@@ -180,7 +220,7 @@ if ($CloudflaredProc) {
 Write-Output "=" * 70
 Write-Output ""
 
-# --- 6. PERSISTENCE LOOP (WATCHDOG) ---
+# --- 7. PERSISTENCE LOOP (WATCHDOG) ---
 if ($Persistent) {
     Write-Output "[$Time] WATCHDOG ACTIVE: Monitoring services every 10s. Press Ctrl+C to stop."
     while ($true) {

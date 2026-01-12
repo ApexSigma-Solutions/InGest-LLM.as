@@ -1,14 +1,10 @@
 """
-Parsers for different content types.
+Parsers module for InGest-LLM.as.
 
-This module provides specialized parsers for various content types,
-enabling sophisticated content analysis and extraction.
+Provides various parsing capabilities including document parsing for NLP
+and Python AST parsing.
 """
 
-from .python_ast_parser import PythonASTParser, CodeElement, CodeElementType
+from .document_parser import DocumentParser
 
-__all__ = [
-    "PythonASTParser",
-    "CodeElement", 
-    "CodeElementType",
-]
+__all__ = ["DocumentParser"]
