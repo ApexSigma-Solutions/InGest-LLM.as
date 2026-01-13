@@ -8,9 +8,14 @@ including local directories, Git repositories, and comprehensive project analysi
 import time
 from typing import Dict, Any
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
+from ..database.session import get_ingest_db
+from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
     RepositoryIngestionRequest,
     RepositoryIngestionResponse,
@@ -49,6 +54,7 @@ _ingestion_status: Dict[str, RepositoryIngestionResponse] = {}
 async def ingest_python_repository(
     request: RepositoryIngestionRequest,
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_ingest_db),
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> RepositoryIngestionResponse:
     """
@@ -57,10 +63,14 @@ async def ingest_python_repository(
     This endpoint processes entire Python repositories, extracting code elements,
     generating embeddings, and storing everything in the memOS.as memory system
     with full observability and analysis.
+    
+    CRITICAL: Raw repository metadata is persisted to PostgreSQL BEFORE processing
+    to ensure 100% data retention (TN-CORE-101).
 
     Args:
         request: Repository ingestion request with source and configuration
         background_tasks: FastAPI background tasks for async processing
+        db: Synchronous database session for raw persistence
         memos_client: memOS.as client dependency
 
     Returns:
@@ -71,6 +81,45 @@ async def ingest_python_repository(
     """
     start_time = time.time()
     ingestion_id = uuid4()
+    
+    # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
+    # Write raw repository metadata to PostgreSQL BEFORE any processing
+    try:
+        raw_record = RawIngestion(
+            ingestion_id=ingestion_id,
+            source_type="python-repo",
+            content_type="repository",
+            raw_payload=request.model_dump(mode="json"),
+            metadata={
+                "repository_source": request.repository_source.value,
+                "source_path": request.source_path,
+                "max_files": request.max_files,
+                "max_file_size": request.max_file_size,
+                "include_patterns": request.include_patterns,
+                "exclude_patterns": request.exclude_patterns[:5],  # First 5 for brevity
+            },
+            captured_at=datetime.utcnow(),
+            processed=False,
+        )
+        db.add(raw_record)
+        db.commit()
+        
+        logger.info(f"Raw repository ingestion persisted: {ingestion_id} ({request.source_path})")
+        
+    except IntegrityError as e:
+        db.rollback()
+        logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ingestion {ingestion_id} already exists"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to persist raw repository ingestion: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist raw repository ingestion data"
+        )
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
