@@ -190,7 +190,7 @@ class TestRepositoryIngestionRawPersistence:
             raw_record = test_db_session.query(RawIngestion).filter_by(
                 ingestion_id=ingestion_id
             ).first()
-            
+
             assert raw_record is not None
             assert raw_record.source_type == "python-repo"
             assert raw_record.content_type == "repository"

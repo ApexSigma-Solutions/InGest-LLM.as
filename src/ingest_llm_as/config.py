@@ -45,6 +45,11 @@ class Settings(BaseSettings):
 
     # Processing limits
     max_content_size: int = Field(default=1_000_000, description="Max content size in bytes (1MB)")
+    max_payload_size: int = Field(
+        default=5_000_000, 
+        description="Max total payload size in bytes (5MB) for DoS protection",
+        validation_alias="MAX_PAYLOAD_SIZE"
+    )
     default_chunk_size: int = Field(default=1000, description="Default chunk size")
     max_chunks_per_request: int = Field(default=100, description="Max chunks per request")
 

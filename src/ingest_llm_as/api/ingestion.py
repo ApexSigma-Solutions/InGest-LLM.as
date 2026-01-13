@@ -5,6 +5,7 @@ This module implements the core ingestion endpoints for processing
 and storing content in the memOS.as memory system.
 """
 
+import json
 import time
 import traceback
 from typing import List, Optional
@@ -99,43 +100,45 @@ async def ingest_text(
     print("DEBUG ingest_text: Endpoint called")
     start_time = time.time()
     ingestion_id = uuid4()
-    
+
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw data to PostgreSQL BEFORE any processing to ensure data retention
     try:
+        from datetime import timezone
+
         raw_record = RawIngestion(
             ingestion_id=ingestion_id,
             source_type="text",
             content_type=request.metadata.content_type.value,
-            raw_payload=request.model_dump(mode="json"),
+            raw_payload=payload_dict,
             raw_metadata={
                 "source": request.metadata.source.value,
                 "tags": request.metadata.tags,
                 "source_url": request.metadata.source_url,
                 "title": request.metadata.title,
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
         db.commit()
-        
-        logger.info(f"Raw ingestion persisted: {ingestion_id}")
-        
-    except IntegrityError as e:
+
+        logger.info("Raw ingestion persisted: %s", ingestion_id)
+
+    except IntegrityError:
         db.rollback()
-        logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+        logger.warning("Duplicate ingestion ID: %s", ingestion_id)
         raise HTTPException(
             status_code=409,
-            detail=f"Ingestion {ingestion_id} already exists"
-        )
+            detail=f"Ingestion {ingestion_id} already exists",
+        ) from None
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to persist raw ingestion: {e}")
+        logger.exception("Failed to persist raw ingestion: %s", e)
         raise HTTPException(
             status_code=500,
-            detail="Failed to persist raw ingestion data"
-        )
+            detail="Failed to persist raw ingestion data",
+        ) from e
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
@@ -806,42 +809,34 @@ def _determine_memory_tier(content_type) -> MemoryTier:
 @router.get("/queue", response_model=QueueStatus)
 async def get_queue_status():
     """
-    Get current status of the conversation ingestion queue from unified raw_ingestions table.
+    Get current status of the conversation ingestion queue.
+    Queries the raw_ingestions table filtered by source_type='conversation'.
     """
-    # Use SQLAlchemy for unified data access
-    from sqlalchemy import func, case
-    from ..database.session import get_async_session
-    from ..db_models.raw_ingestion import RawIngestion
-    
-    async for session in get_async_session():
-        try:
-            # Get counts for conversation source type
-            stats = await session.execute(
-                select(
-                    func.count().filter(RawIngestion.processed == False).label("pending"),
-                    func.count().filter(RawIngestion.processed == True).label("processed"),
-                    func.count().label("total"),
-                    func.extract(
-                        "epoch",
-                        func.now() - func.min(
-                            case((RawIngestion.processed == False, RawIngestion.captured_at))
-                        )
-                    ).label("oldest_age")
-                )
-                .where(RawIngestion.source_type == "conversation")
-            )
-            
-            result = stats.one()
-            
-            return QueueStatus(
-                pending_count=result.pending or 0,
-                processed_count=result.processed or 0,
-                total_count=result.total or 0,
-                oldest_pending_age_seconds=result.oldest_age,
-            )
-        except Exception as e:
-            logger.error(f"Queue status check failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+    db_url = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
+    conn = await asyncpg.connect(db_url)
+    try:
+        # Get counts for conversation records only
+        stats = await conn.fetchrow("""
+            SELECT 
+                COUNT(*) FILTER (WHERE processed = FALSE) as pending,
+                COUNT(*) FILTER (WHERE processed = TRUE) as processed,
+                COUNT(*) as total,
+                EXTRACT(EPOCH FROM (NOW() - MIN(captured_at) FILTER (WHERE processed = FALSE))) as oldest_age
+            FROM raw_ingestions
+            WHERE source_type = 'conversation'
+        """)
+
+        return QueueStatus(
+            pending_count=stats["pending"] or 0,
+            processed_count=stats["processed"] or 0,
+            total_count=stats["total"] or 0,
+            oldest_pending_age_seconds=stats["oldest_age"],
+        )
+    except Exception as e:
+        logger.error(f"Queue status check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await conn.close()
 
 
 @router.get("/status/{ingestion_id}")

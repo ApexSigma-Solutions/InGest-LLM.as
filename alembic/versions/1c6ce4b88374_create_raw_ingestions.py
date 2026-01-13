@@ -51,4 +51,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop raw_ingestions table."""
+    op.drop_index('idx_raw_ingestions_ingestion_id', table_name='raw_ingestions')
+    op.drop_index('idx_raw_ingestions_source_type', table_name='raw_ingestions')
+    op.drop_index('idx_raw_ingestions_captured_at', table_name='raw_ingestions')
+    op.drop_index('idx_raw_ingestions_processed', table_name='raw_ingestions')
     op.drop_table('raw_ingestions')
