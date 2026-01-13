@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     summarization_model: str = Field(default="llama3.1", description="Model used for summarization")
 
     # --- Database Config ---
-    # Connection string to the Ingest Database (where raw_conversations live)
+    # Connection string to the Ingest Database (where raw_ingestions table lives)
     # Defaulting to the known local value or override via env INGEST_RAW_DB_URL
     raw_db_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/ingest_db",
