@@ -30,8 +30,8 @@ async def test_conversation_ingestor_refactor():
             try:
                 # Cleanup and insert test data
                 await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS raw_conversations (
-                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    CREATE TABLE IF NOT EXISTS raw_ingestions (
+                        ingestion_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         source_id VARCHAR(255) UNIQUE NOT NULL,
                         platform VARCHAR(50),
                         raw_payload JSONB NOT NULL,

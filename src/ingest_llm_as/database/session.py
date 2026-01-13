@@ -91,7 +91,7 @@ async def get_async_session() -> Generator[AsyncSession, None, None]:
     
     Usage:
         async def process_ingestion(ingestion_id: str):
-            async with get_async_session() as session:
+            async for session in get_async_session():
                 # Process ingestion
                 await session.commit()
     
@@ -99,7 +99,4 @@ async def get_async_session() -> Generator[AsyncSession, None, None]:
         AsyncSession: Async SQLAlchemy session
     """
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session

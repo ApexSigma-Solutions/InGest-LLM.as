@@ -48,8 +48,134 @@ class ConversationIngestor:
         """
         Fetch and process unprocessed conversations.
         """
-        # asyncpg connection for polling
-        conn = await asyncpg.connect(self.settings.raw_db_url.replace("postgresql+asyncpg", "postgresql"))
+        # Use unified raw_ingestions table via the shared SQLAlchemy async session provider
+        # NOTE: requires:
+        #   from sqlalchemy import text
+        #   from ingest_llm_as.db.session import get_async_session
+        async with get_async_session() as session:
+            try:
+                result = await session.execute(
+                    text("""
+                        SELECT id, source_id, platform, raw_payload, captured_at
+                        FROM raw_ingestions
+                        WHERE processed = FALSE
+                          AND ingestion_type = 'conversation'
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    """)
+                )
+                row = result.mappings().first()
+
+                if not row:
+                    return 0
+
+                record_id = row["id"]
+                source_id = row["source_id"]
+                platform = row["platform"]
+                captured_at = row["captured_at"]
+
+                # raw_payload may be JSONB (dict) or a string, depending on how it was written
+                raw_payload = row["raw_payload"]
+                raw_data = raw_payload if isinstance(raw_payload, dict) else json.loads(raw_payload)
+
+                logger.info(f"Processing conversation: {source_id}")
+
+                # 1. Summarize
+                messages = raw_data.get("messages", [])
+                message_count = len(messages)
+
+                summary_content = await self.summarizer.summarize_conversation(
+                    messages,
+                    context=f"Platform: {platform}, Date: {captured_at}",
+                )
+
+                # 2. Write to Obsidian Vault (Durable local backup)
+                file_path = await self._write_to_vault(source_id, platform, summary_content, captured_at)
+
+                # 3. Generate Embedding (Vector)
+                conversation_text = f"Platform: {platform}\nSummary: {summary_content}\n"
+                for msg in messages[:EMBEDDING_CONTEXT_MESSAGE_COUNT]:  # Include context from first 5 msgs
+                    conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')[:200]}\n"
+
+                embedding = await generate_content_embedding(conversation_text, content_type="text")
+
+                # 4. Call OmegaKG Validation API Gateway
+                try:
+                    digest = create_conversation_digest(
+                        raw_payload=raw_data,
+                        summary=summary_content,
+                        vault_filepath=str(file_path),
+                        source_id=source_id,
+                        platform=platform,
+                        message_count=message_count,
+                        embedding=embedding,
+                        captured_at=captured_at,
+                    )
+
+                    logger.debug(f"Submitting digest for {source_id} to OmegaKG...")
+                    response = await self.omegakg_client.validate_and_store(digest.model_dump(mode="json"))
+
+                    status = response.get("status")
+                    if status in ["accepted", "duplicate"]:
+                        logger.info(
+                            f"OmegaKG {status} digest for {source_id}. "
+                            f"IDs: neo4j={response.get('neo4j_node_id')}, vector={response.get('vector_id')}"
+                        )
+
+                        # 5. Update Local Record (Mark Processed)
+                        await session.execute(
+                            text("""
+                                UPDATE raw_ingestions
+                                SET processed = TRUE,
+                                    processed_at = NOW(),
+                                    processing_attempts = processing_attempts + 1,
+                                    last_error = NULL
+                                WHERE id = :id
+                            """),
+                            {"id": record_id},
+                        )
+                        await session.commit()
+
+                        logger.info(f"Successfully processed {source_id}.")
+                        return 1
+
+                    error_msg = response.get("message") or "Unknown validation error"
+                    logger.warning(f"OmegaKG rejected digest for {source_id}: {error_msg}")
+
+                    # Mark as processed with error to avoid infinite loop
+                    await session.execute(
+                        text("""
+                            UPDATE raw_ingestions
+                            SET processed = TRUE,
+                                processed_at = NOW(),
+                                processing_attempts = processing_attempts + 1,
+                                last_error = :err
+                            WHERE id = :id
+                        """),
+                        {"id": record_id, "err": f"OmegaKG Rejection: {error_msg}"},
+                    )
+                    await session.commit()
+                    return 1
+
+                except Exception as e:
+                    logger.error(f"Failed to submit digest to OmegaKG: {str(e)}", exc_info=True)
+                    # Increment attempts but keep processed = FALSE for retry
+                    await session.execute(
+                        text("""
+                            UPDATE raw_ingestions
+                            SET processing_attempts = processing_attempts + 1,
+                                last_error = :err
+                            WHERE id = :id
+                        """),
+                        {"id": record_id, "err": str(e)},
+                    )
+                    await session.commit()
+                    return 0  # Will retry on next poll
+
+            except Exception:
+                # Any unexpected DB/session error
+                logger.error("Error while polling raw_ingestions for conversations", exc_info=True)
+                return 0
         
         try:
             row = await conn.fetchrow("""
@@ -85,7 +211,7 @@ class ConversationIngestor:
             
             # 3. Generate Embedding (Vector)
             conversation_text = f"Platform: {platform}\nSummary: {summary_content}\n"
-            for msg in messages[:5]: # Include context from first 5 msgs
+            for msg in messages[:EMBEDDING_CONTEXT_MESSAGE_COUNT]: # Include context from first 5 msgs
                 conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')[:200]}\n"
             
             embedding = await generate_content_embedding(conversation_text, content_type="text")
