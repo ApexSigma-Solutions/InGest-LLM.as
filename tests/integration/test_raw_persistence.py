@@ -71,7 +71,7 @@ class TestTextIngestionRawPersistence:
         assert raw_record.source_type == "text"
         assert raw_record.content_type == "text"
         assert raw_record.raw_payload["content"] == payload["content"]
-        assert raw_record.metadata["tags"] == ["test", "python"]
+        assert raw_record.raw_metadata["tags"] == ["test", "python"]
         assert raw_record.processed == False
         assert raw_record.file_data is None
     
