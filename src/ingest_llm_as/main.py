@@ -8,6 +8,7 @@ from .api.ingestion import router as ingestion_router
 from .api.repository import router as repository_router
 from .api.ecosystem import router as ecosystem_router
 from .api.analysis import router as analysis_router
+from .api.graph_parser import router as graph_parser_router
 
 from .api.omega_ingest import router as omega_ingest_router
 
@@ -16,8 +17,10 @@ from .routers.webhook_forwarder import router as webhook_forwarder_router
 from .routers.webhook import router as webhook_router
 from .observability.logging import get_logger
 from ingest_llm_as.processors.conversation_ingestor import ConversationIngestor
+from ingest_llm_as.processors.terminal_processor import TerminalProcessor
 
 logger = get_logger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,32 +30,47 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Initializing InGest-LLM services...")
-    
+
     settings = get_settings()
     logger.info(f"DEBUG: raw_db_url={settings.raw_db_url}")
     logger.info(f"DEBUG: neo4j_uri={settings.neo4j_uri}")
-    
+
+    # Track tasks
+    app.state.bg_tasks = []
+
     try:
-        # Start Conversation Ingestor
-        ingestor = ConversationIngestor()
-        # Run as background task
-        task = asyncio.create_task(ingestor.start())
-        pass
+        # 1. Start Conversation Ingestor
+        conv_ingestor = ConversationIngestor()
+        app.state.bg_tasks.append(asyncio.create_task(conv_ingestor.start()))
+        app.state.conv_ingestor = conv_ingestor
+
+        # 2. Start Terminal Processor
+        term_processor = TerminalProcessor()
+        app.state.bg_tasks.append(asyncio.create_task(term_processor.start()))
+        app.state.term_processor = term_processor
+
+        logger.info("[WORKHORSE] InGest-LLM processors started.")
     except Exception as e:
         logger.error(f"CRITICAL STARTUP ERROR: {e}", exc_info=True)
         raise e
-    
+
     yield
-    
+
     # Shutdown
-    logger.info("Shutting down InGest-LLM services...")
-    await ingestor.stop()
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    logger.info("Shutting down InGest-LLM Workhorse services...")
+
+    if hasattr(app.state, "conv_ingestor"):
+        await app.state.conv_ingestor.stop()
+    if hasattr(app.state, "term_processor"):
+        await app.state.term_processor.stop()
+
+    for task in app.state.bg_tasks:
+        task.cancel()
+
+    # Wait for all tasks to complete cancellation
+    await asyncio.gather(*app.state.bg_tasks, return_exceptions=True)
     logger.info("Services stopped.")
+
 
 def create_app() -> FastAPI:
     """Create the FastAPI application.
@@ -71,6 +89,7 @@ def create_app() -> FastAPI:
 
     # Configure CORS
     from fastapi.middleware.cors import CORSMiddleware
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # Allow all origins for development
@@ -84,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(repository_router)
     app.include_router(ecosystem_router)
     app.include_router(analysis_router)
+    app.include_router(graph_parser_router)
     app.include_router(omega_ingest_router)
     app.include_router(eod_logs_router)
     app.include_router(webhook_forwarder_router)

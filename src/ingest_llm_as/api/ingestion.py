@@ -7,6 +7,7 @@ and storing content in the memOS.as memory system.
 
 import json
 import time
+import json
 import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -31,6 +32,10 @@ from ..models import (
     IngestionMetadata,
     SourceType,
     ContentType,
+)
+from ..services.conversation_synthesizer import (
+    ConversationSynthesizer,
+    ConversionDigest,
 )
 
 
@@ -476,12 +481,6 @@ async def ingest_file(
     except Exception as e:
         logger.error(f"File ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    """
-    Ingest a working experience promoted from memOS.MCP.
-
-    This endpoint handles structured experience data from the memOS bridge,
-    processing it as a high-priority semantic memory.
-    """
 
 
 @router.post("/experience", response_model=IngestionResponse)
@@ -594,6 +593,34 @@ async def ingest_experience(
 
     except Exception as e:
         logger.error(f"Error in ingest_experience: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/digest", response_model=ConversionDigest)
+async def digest_conversation(
+    request: IngestionRequest,
+    synthesizer: ConversationSynthesizer = Depends(ConversationSynthesizer),
+) -> ConversionDigest:
+    """
+    Synthesize raw conversation messages into a structured digest.
+    Does NOT store in memOS, just returns the analysis.
+    """
+    try:
+        # Assuming content is the raw JSON messages list as string or we use IngestionRequest.content for text
+        # If it's the raw payload from extensions, we might need a specific model
+        # For now, we'll try to parse request.content as JSON if it's a list
+        try:
+            messages = json.loads(request.content)
+            if not isinstance(messages, list):
+                messages = [{"role": "user", "content": request.content}]
+        except (json.JSONDecodeError, TypeError):
+            messages = [{"role": "user", "content": request.content}]
+
+        return await synthesizer.synthesize(
+            messages=messages, platform=request.metadata.source.value
+        )
+    except Exception as e:
+        logger.error(f"Digest failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
