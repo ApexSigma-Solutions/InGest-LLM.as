@@ -45,6 +45,11 @@ class Settings(BaseSettings):
 
     # Processing limits
     max_content_size: int = Field(default=1_000_000, description="Max content size in bytes (1MB)")
+    max_payload_size: int = Field(
+        default=5_000_000, 
+        description="Max total payload size in bytes (5MB) for DoS protection",
+        validation_alias="MAX_PAYLOAD_SIZE"
+    )
     default_chunk_size: int = Field(default=1000, description="Default chunk size")
     max_chunks_per_request: int = Field(default=100, description="Max chunks per request")
 
@@ -79,11 +84,27 @@ class Settings(BaseSettings):
     summarization_model: str = Field(default="llama3.1", description="Model used for summarization")
 
     # --- Database Config ---
-    # Connection string to the Ingest Database (where raw_conversations live)
+    # Connection string to the Ingest Database (where raw_ingestions table lives)
     # Defaulting to the known local value or override via env INGEST_RAW_DB_URL
     raw_db_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/ingest_db",
         description="Connection string for Ingest Database"
+    )
+
+    # --- OmegaKG Integration (TN-CORE-103) ---
+    omegakg_api_url: str = Field(
+        default="http://localhost:8765",
+        description="OmegaKG validation API base URL"
+    )
+    bws_access_token: Optional[str] = Field(
+        None,
+        validation_alias="BWS_ACCESS_TOKEN",
+        description="Bitwarden Secrets Manager access token for service authentication"
+    )
+    static_service_token: Optional[str] = Field(
+        None,
+        validation_alias="STATIC_SERVICE_TOKEN",
+        description="Static token for local development"
     )
     # Vault Path for writing summaries
     obsidian_vault_path: str = Field(default="C:/Users/steyn/Documents/Obsidian Vault", description="Path to Obsidian Vault")

@@ -6,6 +6,8 @@ import asyncpg
 import httpx
 
 from ingest_llm_as.config import get_settings
+from ingest_llm_as.database.session import get_async_session
+from ingest_llm_as.db_models.raw_ingestion import RawIngestion
 from ingest_llm_as.services.llm_summarizer import LLMSummarizer
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,6 @@ class ConversationIngestor:
         self.settings = get_settings()
         self.summarizer = LLMSummarizer()
         self.running = False
-        self.db_url = self.settings.raw_db_url
 
     async def start(self):
         """Start the ingestion loop."""
@@ -33,7 +34,7 @@ class ConversationIngestor:
                 if processed_count == 0:
                     await asyncio.sleep(10)
             except Exception as e:
-                logger.error(f"Error in ingestor loop: {e}")
+                logger.error(f"Error in ingestor loop: {e}", exc_info=True)
                 await asyncio.sleep(10)
 
     async def stop(self):
@@ -41,7 +42,8 @@ class ConversationIngestor:
 
     async def process_pending_conversations(self) -> int:
         """
-        Fetch and process unprocessed conversations.
+        Fetch and process unprocessed conversations from raw_ingestions table.
+        Filters for source_type='conversation' or similar conversation-related types.
         """
         db_url = self.settings.raw_db_url.replace(
             "postgresql+asyncpg://", "postgresql://"
@@ -50,9 +52,10 @@ class ConversationIngestor:
 
         try:
             row = await conn.fetchrow("""
-                SELECT id, source_id, platform, raw_payload, captured_at 
-                FROM raw_conversations 
+                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at 
+                FROM raw_ingestions 
                 WHERE processed = FALSE 
+                AND source_type = 'conversation'
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
             """)
