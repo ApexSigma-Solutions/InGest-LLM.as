@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ConversationIngestor:
     """
-    Polls 'raw_conversations' table, summarizes content, and sends to OmegaKG validation API.
+    Polls 'raw_ingestions' table for conversation records, summarizes content, and sends to OmegaKG validation API.
     
     REFACTORED: No longer writes to Neo4j/pgvector directly.
+    Uses the migration-managed 'raw_ingestions' table instead of 'raw_conversations'.
     """
     def __init__(self):
         self.settings = get_settings()
@@ -46,7 +47,8 @@ class ConversationIngestor:
 
     async def process_pending_conversations(self) -> int:
         """
-        Fetch and process unprocessed conversations.
+        Fetch and process unprocessed conversations from raw_ingestions table.
+        Filters for source_type='conversation' or similar conversation-related types.
         """
         # Use unified raw_ingestions table via the shared SQLAlchemy async session provider
         # NOTE: requires:
@@ -179,9 +181,10 @@ class ConversationIngestor:
         
         try:
             row = await conn.fetchrow("""
-                SELECT id, source_id, platform, raw_payload, captured_at 
-                FROM raw_conversations 
+                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at 
+                FROM raw_ingestions 
                 WHERE processed = FALSE 
+                AND source_type = 'conversation'
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
             """)
@@ -190,10 +193,16 @@ class ConversationIngestor:
                 return 0
 
             record_id = row['id']
-            source_id = row['source_id']
-            raw_data = json.loads(row['raw_payload'])
-            platform = row['platform']
+            ingestion_id = row['ingestion_id']
+            # asyncpg automatically deserializes JSONB columns to Python dicts
+            raw_data = row['raw_payload']
+            raw_metadata = row['raw_metadata'] or {}
+            source_type = row['source_type']
             captured_at = row['captured_at']
+            
+            # Extract platform from metadata or raw_payload
+            platform = raw_metadata.get('platform') or raw_data.get('platform', 'Unknown')
+            source_id = str(ingestion_id)  # Use ingestion_id as source_id
             
             logger.info(f"Processing conversation: {source_id}")
 
@@ -239,7 +248,7 @@ class ConversationIngestor:
                     
                     # 5. Update Local Record (Mark Processed)
                     await conn.execute("""
-                        UPDATE raw_conversations 
+                        UPDATE raw_ingestions 
                         SET processed = TRUE, 
                             processed_at = NOW(),
                             processing_attempts = processing_attempts + 1
@@ -254,7 +263,7 @@ class ConversationIngestor:
                     
                     # Mark as processed with error to avoid infinite loop
                     await conn.execute("""
-                        UPDATE raw_conversations 
+                        UPDATE raw_ingestions 
                         SET processed = TRUE, 
                             processed_at = NOW(),
                             processing_attempts = processing_attempts + 1,
@@ -267,7 +276,7 @@ class ConversationIngestor:
                 logger.error(f"Failed to submit digest to OmegaKG: {str(e)}")
                 # Increment attempts but keep processed = FALSE for retry
                 await conn.execute("""
-                    UPDATE raw_conversations 
+                    UPDATE raw_ingestions 
                     SET processing_attempts = processing_attempts + 1,
                         last_error = $2
                     WHERE id = $1

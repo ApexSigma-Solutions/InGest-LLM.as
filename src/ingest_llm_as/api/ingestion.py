@@ -810,18 +810,20 @@ def _determine_memory_tier(content_type) -> MemoryTier:
 async def get_queue_status():
     """
     Get current status of the conversation ingestion queue.
+    Queries the raw_ingestions table filtered by source_type='conversation'.
     """
     db_url = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
     conn = await asyncpg.connect(db_url)
     try:
-        # Get counts
+        # Get counts for conversation records only
         stats = await conn.fetchrow("""
             SELECT 
                 COUNT(*) FILTER (WHERE processed = FALSE) as pending,
                 COUNT(*) FILTER (WHERE processed = TRUE) as processed,
                 COUNT(*) as total,
                 EXTRACT(EPOCH FROM (NOW() - MIN(captured_at) FILTER (WHERE processed = FALSE))) as oldest_age
-            FROM raw_conversations
+            FROM raw_ingestions
+            WHERE source_type = 'conversation'
         """)
 
         return QueueStatus(
