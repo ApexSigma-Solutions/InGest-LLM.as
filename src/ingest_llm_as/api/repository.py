@@ -8,7 +8,7 @@ including local directories, Git repositories, and comprehensive project analysi
 import time
 from typing import Dict, Any
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
@@ -98,7 +98,7 @@ async def ingest_python_repository(
                 "include_patterns": request.include_patterns,
                 "exclude_patterns": request.exclude_patterns[:5],  # First 5 for brevity
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
