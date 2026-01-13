@@ -8,19 +8,22 @@ import asyncpg
 
 from ingest_llm_as.config import get_settings
 from ingest_llm_as.services.llm_summarizer import LLMSummarizer
-from ingest_llm_as.services.neo4j_service import Neo4jService
+from ingest_llm_as.services.omegakg_client import OmegaKGClient
 from ingest_llm_as.services.vectorizer import generate_content_embedding
+from ingest_llm_as.models.knowledge_digest import create_conversation_digest
 
 logger = logging.getLogger(__name__)
 
 class ConversationIngestor:
     """
-    Polls 'raw_conversations' table, summarizes content, and ingests into Vault & Graph.
+    Polls 'raw_conversations' table, summarizes content, and sends to OmegaKG validation API.
+    
+    REFACTORED: No longer writes to Neo4j/pgvector directly.
     """
     def __init__(self):
         self.settings = get_settings()
         self.summarizer = LLMSummarizer()
-        self.neo4j_service = Neo4jService()
+        self.omegakg_client = OmegaKGClient()
         self.running = False
         self.db_url = self.settings.raw_db_url
 
@@ -34,17 +37,18 @@ class ConversationIngestor:
                 if processed_count == 0:
                     await asyncio.sleep(5)
             except Exception as e:
-                logger.error(f"Error in ingestor loop: {e}")
+                logger.error(f"Error in ingestor loop: {e}", exc_info=True)
                 await asyncio.sleep(10)
 
     async def stop(self):
         self.running = False
-        self.neo4j_service.close()
+        await self.omegakg_client.close()
 
     async def process_pending_conversations(self) -> int:
         """
         Fetch and process unprocessed conversations.
         """
+        # asyncpg connection for polling
         conn = await asyncpg.connect(self.settings.raw_db_url.replace("postgresql+asyncpg", "postgresql"))
         
         try:
@@ -76,52 +80,73 @@ class ConversationIngestor:
                 context=f"Platform: {platform}, Date: {captured_at}"
             )
             
-            # 2. Write to Obsidian
+            # 2. Write to Obsidian Vault (Durable local backup)
             file_path = await self._write_to_vault(source_id, platform, summary_content, captured_at)
             
             # 3. Generate Embedding (Vector)
-            # Combine content for embedding: platform + summary + first few messages
             conversation_text = f"Platform: {platform}\nSummary: {summary_content}\n"
             for msg in messages[:5]: # Include context from first 5 msgs
-                conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')}\n"
+                conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')[:200]}\n"
             
             embedding = await generate_content_embedding(conversation_text, content_type="text")
             
-            # 4. Write to Neo4j (Graph)
-            # Extract URL if available
-            url = raw_data.get('url')
-            
-            node_id = self.neo4j_service.create_chat_session(
-                source_id=source_id,
-                platform=platform,
-                filepath=str(file_path),
-                message_count=message_count,
-                url=url
-            )
-            logger.info(f"Created Neo4j Node: {node_id}")
-
-            # 5. Update Record (Mark Processed + Save Embedding)
-            if embedding:
-                # asyncpg requires native list for vector input if pgvector is used, 
-                # but usually string representation works like '[1,2,3]'
-                # Let's try passing string format which pgvector accepts
-                embedding_str = str(embedding)
+            # 4. REFACTORED: Call OmegaKG Validation API Gateway
+            # Instead of direct Neo4j/pgvector writes, we delegate to the Gateway.
+            try:
+                digest = create_conversation_digest(
+                    raw_payload=raw_data,
+                    summary=summary_content,
+                    vault_filepath=str(file_path),
+                    source_id=source_id,
+                    platform=platform,
+                    message_count=message_count,
+                    embedding=embedding,
+                    captured_at=captured_at
+                )
+                
+                logger.debug(f"Submitting digest for {source_id} to OmegaKG...")
+                response = await self.omegakg_client.validate_and_store(digest.model_dump(mode="json"))
+                
+                status = response.get("status")
+                if status in ["accepted", "duplicate"]:
+                    logger.info(f"OmegaKG {status} digest for {source_id}. IDs: neo4j={response.get('neo4j_node_id')}, vector={response.get('vector_id')}")
+                    
+                    # 5. Update Local Record (Mark Processed)
+                    await conn.execute("""
+                        UPDATE raw_conversations 
+                        SET processed = TRUE, 
+                            processed_at = NOW(),
+                            processing_attempts = processing_attempts + 1
+                        WHERE id = $1
+                    """, record_id)
+                    
+                    logger.info(f"Successfully processed {source_id}.")
+                    return 1
+                else:
+                    error_msg = response.get("message") or "Unknown validation error"
+                    logger.warning(f"OmegaKG rejected digest for {source_id}: {error_msg}")
+                    
+                    # Mark as processed with error to avoid infinite loop
+                    await conn.execute("""
+                        UPDATE raw_conversations 
+                        SET processed = TRUE, 
+                            processed_at = NOW(),
+                            processing_attempts = processing_attempts + 1,
+                            last_error = $2
+                        WHERE id = $1
+                    """, record_id, f"OmegaKG Rejection: {error_msg}")
+                    return 1
+                    
+            except Exception as e:
+                logger.error(f"Failed to submit digest to OmegaKG: {str(e)}")
+                # Increment attempts but keep processed = FALSE for retry
                 await conn.execute("""
                     UPDATE raw_conversations 
-                    SET processed = TRUE, 
-                        processed_at = NOW(),
-                        embedding = $2
+                    SET processing_attempts = processing_attempts + 1,
+                        last_error = $2
                     WHERE id = $1
-                """, record_id, embedding_str)
-            else:
-                await conn.execute("""
-                    UPDATE raw_conversations 
-                    SET processed = TRUE, processed_at = NOW() 
-                    WHERE id = $1
-                """, record_id)
-            
-            logger.info(f"Successfully processed {source_id}.")
-            return 1
+                """, record_id, str(e))
+                return 0 # Will retry on next poll
 
         finally:
             await conn.close()

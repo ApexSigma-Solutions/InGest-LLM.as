@@ -85,6 +85,22 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/ingest_db",
         description="Connection string for Ingest Database"
     )
+
+    # --- OmegaKG Integration (TN-CORE-103) ---
+    omegakg_api_url: str = Field(
+        default="http://localhost:8765",
+        description="OmegaKG validation API base URL"
+    )
+    bws_access_token: Optional[str] = Field(
+        None,
+        validation_alias="BWS_ACCESS_TOKEN",
+        description="Bitwarden Secrets Manager access token for service authentication"
+    )
+    static_service_token: Optional[str] = Field(
+        None,
+        validation_alias="STATIC_SERVICE_TOKEN",
+        description="Static token for local development"
+    )
     # Vault Path for writing summaries
     obsidian_vault_path: str = Field(default="C:/Users/steyn/Documents/Obsidian Vault", description="Path to Obsidian Vault")
 

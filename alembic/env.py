@@ -3,6 +3,7 @@
 This module configures Alembic to work with the InGest-LLM database,
 loading connection settings from the application's Settings class.
 """
+
 import asyncio
 from logging.config import fileConfig
 import sys
@@ -20,7 +21,9 @@ sys.path.insert(0, str(src_path))
 
 from ingest_llm_as.config import get_settings
 from ingest_llm_as.db_models.base import Base
-from ingest_llm_as.db_models.raw_ingestion import RawIngestion  # Import to register with metadata
+from ingest_llm_as.db_models.raw_ingestion import (
+    RawIngestion,
+)  # Import to register with metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -65,6 +68,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table="alembic_version_ingest",
     )
 
     with context.begin_transaction():
@@ -86,7 +90,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table="alembic_version_ingest",
         )
 
         with context.begin_transaction():
