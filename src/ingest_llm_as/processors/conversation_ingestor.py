@@ -17,6 +17,9 @@ from ingest_llm_as.models.knowledge_digest import create_conversation_digest
 
 logger = logging.getLogger(__name__)
 
+# Constants
+EMBEDDING_CONTEXT_MESSAGE_COUNT = 5  # Number of messages to include in embedding context
+
 class ConversationIngestor:
     """
     Polls 'raw_ingestions' table for conversation records, summarizes content, and sends to OmegaKG validation API.
@@ -92,8 +95,8 @@ class ConversationIngestor:
                 
                 # 3. Generate Embedding (Vector)
                 conversation_text = f"Platform: {platform}\nSummary: {summary_content}\n"
-                # Include context from first 5 messages
-                for msg in messages[:5]:
+                # Include context from first N messages
+                for msg in messages[:EMBEDDING_CONTEXT_MESSAGE_COUNT]:
                     conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')[:200]}\n"
                 
                 embedding = await generate_content_embedding(conversation_text, content_type="text")
