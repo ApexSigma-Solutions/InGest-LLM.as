@@ -9,7 +9,7 @@ import time
 import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
@@ -114,7 +114,7 @@ async def ingest_text(
                 "source_url": request.metadata.source_url,
                 "title": request.metadata.title,
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
@@ -128,14 +128,14 @@ async def ingest_text(
         raise HTTPException(
             status_code=409,
             detail=f"Ingestion {ingestion_id} already exists"
-        )
+        ) from e
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to persist raw ingestion: {e}")
         raise HTTPException(
             status_code=500,
             detail="Failed to persist raw ingestion data"
-        )
+        ) from e
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
@@ -392,7 +392,7 @@ async def ingest_file(
                     "filename": filename,
                     "original_content_type": file.content_type,
                 },
-                captured_at=datetime.utcnow(),
+                captured_at=datetime.now(timezone.utc),
                 processed=False,
             )
             db.add(raw_record)
