@@ -102,8 +102,10 @@ async def ingest_text(
     ingestion_id = uuid4()
     
     # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    # Serialize once and reuse for both size check and storage
     payload_dict = request.model_dump(mode="json")
-    payload_size = len(json.dumps(payload_dict).encode('utf-8'))
+    payload_json = json.dumps(payload_dict)
+    payload_size = len(payload_json.encode('utf-8'))
     
     if payload_size > settings.max_payload_size:
         logger.warning(

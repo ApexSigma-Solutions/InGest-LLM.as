@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from ..config import settings as config_settings
+from ..config import settings
 from ..database.session import get_ingest_db
 from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
@@ -85,16 +85,18 @@ async def ingest_python_repository(
     ingestion_id = uuid4()
     
     # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    # Serialize once and reuse for both size check and storage
     payload_dict = request.model_dump(mode="json")
-    payload_size = len(json.dumps(payload_dict).encode('utf-8'))
+    payload_json = json.dumps(payload_dict)
+    payload_size = len(payload_json.encode('utf-8'))
     
-    if payload_size > config_settings.max_payload_size:
+    if payload_size > settings.max_payload_size:
         logger.warning(
-            f"Repository payload too large: {payload_size} bytes exceeds limit of {config_settings.max_payload_size} bytes"
+            f"Repository payload too large: {payload_size} bytes exceeds limit of {settings.max_payload_size} bytes"
         )
         raise HTTPException(
             status_code=413,
-            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({config_settings.max_payload_size} bytes)"
+            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({settings.max_payload_size} bytes)"
         )
     
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
