@@ -9,12 +9,17 @@ import time
 import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
+from datetime import datetime
 
 import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..config import settings
+from ..database.session import get_ingest_db
+from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
     IngestionRequest,
     IngestionResponse,
@@ -67,6 +72,7 @@ router = APIRouter(prefix="/ingest", tags=["ingestion"])
 async def ingest_text(
     request: IngestionRequest,
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_ingest_db),
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> IngestionResponse:
     """
@@ -74,10 +80,14 @@ async def ingest_text(
 
     This endpoint processes text content, chunks it if necessary,
     and stores it in the appropriate memOS.as memory tiers.
+    
+    CRITICAL: Raw data is persisted to PostgreSQL BEFORE any processing
+    to ensure 100% data retention (TN-CORE-101).
 
     Args:
         request: Ingestion request with content and metadata
         background_tasks: FastAPI background tasks for async processing
+        db: Synchronous database session for raw persistence
         memos_client: memOS.as client dependency
 
     Returns:
@@ -89,6 +99,43 @@ async def ingest_text(
     print("DEBUG ingest_text: Endpoint called")
     start_time = time.time()
     ingestion_id = uuid4()
+    
+    # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
+    # Write raw data to PostgreSQL BEFORE any processing to ensure data retention
+    try:
+        raw_record = RawIngestion(
+            ingestion_id=ingestion_id,
+            source_type="text",
+            content_type=request.metadata.content_type.value,
+            raw_payload=request.model_dump(mode="json"),
+            metadata={
+                "source": request.metadata.source.value,
+                "tags": request.metadata.tags,
+                "source_url": request.metadata.source_url,
+                "title": request.metadata.title,
+            },
+            captured_at=datetime.utcnow(),
+            processed=False,
+        )
+        db.add(raw_record)
+        db.commit()
+        
+        logger.info(f"Raw ingestion persisted: {ingestion_id}")
+        
+    except IntegrityError as e:
+        db.rollback()
+        logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ingestion {ingestion_id} already exists"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to persist raw ingestion: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist raw ingestion data"
+        )
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
@@ -304,17 +351,73 @@ async def ingest_text(
 async def ingest_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    db: Session = Depends(get_ingest_db),
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> IngestionResponse:
     """
     Ingest a file (PDF, Text, Markdown) into the memory system.
+    
+    CRITICAL: Raw file data is persisted to PostgreSQL BEFORE any processing
+    to ensure 100% data retention (TN-CORE-101).
     """
     start_time = time.time()
     ingestion_id = uuid4()
 
     try:
+        # Read file data
         content_bytes = await file.read()
         filename = file.filename or "unknown"
+        
+        # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
+        # Write raw file data to PostgreSQL BEFORE any processing
+        try:
+            # Validate file size
+            if len(content_bytes) > settings.max_content_size:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large: {len(content_bytes)} > {settings.max_content_size}"
+                )
+            
+            raw_record = RawIngestion(
+                ingestion_id=ingestion_id,
+                source_type="file",
+                content_type=file.content_type or "application/octet-stream",
+                raw_payload={
+                    "filename": filename,
+                    "size": len(content_bytes),
+                    "content_type": file.content_type,
+                },
+                file_data=content_bytes,  # Store binary data in BYTEA column
+                metadata={
+                    "filename": filename,
+                    "original_content_type": file.content_type,
+                },
+                captured_at=datetime.utcnow(),
+                processed=False,
+            )
+            db.add(raw_record)
+            db.commit()
+            
+            logger.info(f"Raw file ingestion persisted: {ingestion_id} ({filename})")
+            
+        except IntegrityError as e:
+            db.rollback()
+            logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ingestion {ingestion_id} already exists"
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to persist raw file ingestion: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist raw file data"
+            )
+        
+        # STEP 2: PROCESS FILE (existing logic)
         processor = ContentProcessor()
 
         if filename.lower().endswith(".pdf"):
@@ -334,7 +437,7 @@ async def ingest_file(
 
         # Create metadata
         metadata = IngestionMetadata(
-            source=SourceType.USER_UPLOAD,
+            source=SourceType.UPLOAD,
             content_type=ContentType.DOCUMENTATION,
             source_url=filename,
             title=filename,
@@ -365,6 +468,8 @@ async def ingest_file(
             message=f"Processed file {filename}: {len(results)} chunks",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"File ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
