@@ -49,6 +49,7 @@ class ConversationIngestor:
             "postgresql+asyncpg://", "postgresql://"
         )
         conn = await asyncpg.connect(db_url)
+        source_id = None  # Initialize for error handling
 
         try:
             row = await conn.fetchrow("""
@@ -64,7 +65,7 @@ class ConversationIngestor:
                 return 0
 
             record_id = row["id"]
-            source_id = row["source_id"]
+            source_id = row.get("source_id", row.get("ingestion_id", "unknown"))
             raw_data = json.loads(row["raw_payload"])
             platform = row["platform"]
             captured_at = row["captured_at"]
@@ -125,7 +126,10 @@ class ConversationIngestor:
             return 1
 
         except Exception as e:
-            logger.error(f"Failed to process {source_id}: {e}", exc_info=True)
+            if source_id:
+                logger.error(f"Failed to process {source_id}: {e}", exc_info=True)
+            else:
+                logger.error(f"Failed to fetch conversation for processing: {e}", exc_info=True)
             return 0
         finally:
             await conn.close()
