@@ -6,6 +6,7 @@ import httpx
 import logging
 import asyncio
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 from ingest_llm_as.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,15 @@ class OmegaKGClient:
         
         # SECURITY: Validate HTTPS usage when token authentication is enabled
         if self.token and self.base_url:
-            parsed_url = self.base_url.lower()
-            is_http = parsed_url.startswith('http://') and not parsed_url.startswith('http://localhost') and not parsed_url.startswith('http://127.0.0.1')
+            parsed = urlparse(self.base_url)
+            scheme = parsed.scheme.lower()
+            hostname = parsed.hostname or ''
             
-            if is_http:
+            # Check if using HTTP (not HTTPS) with non-localhost hostname
+            is_localhost = hostname in ('localhost', '127.0.0.1', '::1')
+            is_insecure_http = (scheme == 'http') and not is_localhost
+            
+            if is_insecure_http:
                 # Using HTTP with authentication outside of localhost is a security risk
                 logger.warning(
                     "SECURITY WARNING: OmegaKG API URL uses HTTP (not HTTPS) with authentication. "

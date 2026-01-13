@@ -5,6 +5,7 @@ This module implements the core ingestion endpoints for processing
 and storing content in the memOS.as memory system.
 """
 
+import json
 import time
 import traceback
 from typing import List, Optional
@@ -102,8 +103,7 @@ async def ingest_text(
     
     # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
     payload_dict = request.model_dump(mode="json")
-    payload_json = str(payload_dict)  # Approximate serialized size
-    payload_size = len(payload_json.encode('utf-8'))
+    payload_size = len(json.dumps(payload_dict).encode('utf-8'))
     
     if payload_size > settings.max_payload_size:
         logger.warning(

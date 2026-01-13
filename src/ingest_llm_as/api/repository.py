@@ -5,6 +5,7 @@ This module implements endpoints for ingesting and analyzing Python repositories
 including local directories, Git repositories, and comprehensive project analysis.
 """
 
+import json
 import time
 from typing import Dict, Any
 from uuid import uuid4
@@ -14,6 +15,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from ..config import settings as config_settings
 from ..database.session import get_ingest_db
 from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
@@ -83,10 +85,8 @@ async def ingest_python_repository(
     ingestion_id = uuid4()
     
     # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
-    from ..config import settings as config_settings
     payload_dict = request.model_dump(mode="json")
-    payload_json = str(payload_dict)  # Approximate serialized size
-    payload_size = len(payload_json.encode('utf-8'))
+    payload_size = len(json.dumps(payload_dict).encode('utf-8'))
     
     if payload_size > config_settings.max_payload_size:
         logger.warning(
