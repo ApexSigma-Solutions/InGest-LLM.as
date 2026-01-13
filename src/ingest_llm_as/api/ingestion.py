@@ -108,7 +108,7 @@ async def ingest_text(
             source_type="text",
             content_type=request.metadata.content_type.value,
             raw_payload=request.model_dump(mode="json"),
-            metadata={
+            raw_metadata={
                 "source": request.metadata.source.value,
                 "tags": request.metadata.tags,
                 "source_url": request.metadata.source_url,
@@ -388,7 +388,7 @@ async def ingest_file(
                     "content_type": file.content_type,
                 },
                 file_data=content_bytes,  # Store binary data in BYTEA column
-                metadata={
+                raw_metadata={
                     "filename": filename,
                     "original_content_type": file.content_type,
                 },

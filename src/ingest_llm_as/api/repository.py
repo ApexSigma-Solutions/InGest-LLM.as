@@ -90,7 +90,7 @@ async def ingest_python_repository(
             source_type="python-repo",
             content_type="repository",
             raw_payload=request.model_dump(mode="json"),
-            metadata={
+            raw_metadata={
                 "repository_source": request.repository_source.value,
                 "source_path": request.source_path,
                 "max_files": request.max_files,

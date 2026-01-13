@@ -25,7 +25,7 @@ class RawIngestion(Base):
         content_type: MIME type for files
         raw_payload: Original request body as JSONB
         file_data: Binary file data (NULL for non-file ingestions)
-        metadata: Source metadata, tags, user context
+        raw_metadata: Source metadata, tags, user context (renamed from 'metadata')
         captured_at: Timestamp when ingestion was received
         processed: Flag indicating if worker has processed this record
         processed_at: Timestamp when processing completed
@@ -35,15 +35,15 @@ class RawIngestion(Base):
     """
     __tablename__ = "raw_ingestions"
     
-    id = Column(Integer, primary_key=True, index=True)
-    ingestion_id = Column(PGUUID(as_uuid=True), nullable=False, unique=True, index=True)
-    source_type = Column(String(50), nullable=False, index=True)
+    id = Column(Integer, primary_key=True)
+    ingestion_id = Column(PGUUID(as_uuid=True), nullable=False, unique=True)
+    source_type = Column(String(50), nullable=False)
     content_type = Column(String(100), nullable=True)
     raw_payload = Column(JSONB, nullable=False)
     file_data = Column(LargeBinary, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    raw_metadata = Column(JSONB, nullable=True)  # Renamed from 'metadata' (SQLAlchemy reserved keyword)
     captured_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    processed = Column(Boolean, nullable=False, default=False, index=True)
+    processed = Column(Boolean, nullable=False, default=False)
     processed_at = Column(DateTime, nullable=True)
     processing_attempts = Column(Integer, nullable=False, default=0)
     last_error = Column(Text, nullable=True)

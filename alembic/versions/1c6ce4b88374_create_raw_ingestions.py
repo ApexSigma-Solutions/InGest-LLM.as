@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column('content_type', sa.String(100), nullable=True),
         sa.Column('raw_payload', sa.dialects.postgresql.JSONB, nullable=False),
         sa.Column('file_data', sa.LargeBinary, nullable=True),
-        sa.Column('metadata', sa.dialects.postgresql.JSONB, nullable=True),
+        sa.Column('raw_metadata', sa.dialects.postgresql.JSONB, nullable=True),
         sa.Column('captured_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column('processed', sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column('processed_at', sa.DateTime(), nullable=True),

@@ -19,7 +19,8 @@ src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
 from ingest_llm_as.config import get_settings
-from ingest_llm_as.db_models import Base
+from ingest_llm_as.db_models.base import Base
+from ingest_llm_as.db_models.raw_ingestion import RawIngestion  # Import to register with metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
