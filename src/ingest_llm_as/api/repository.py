@@ -5,12 +5,19 @@ This module implements endpoints for ingesting and analyzing Python repositories
 including local directories, Git repositories, and comprehensive project analysis.
 """
 
+import json
 import time
 from typing import Dict, Any
 from uuid import uuid4
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
+from ..config import settings
+from ..database.session import get_ingest_db
+from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
     RepositoryIngestionRequest,
     RepositoryIngestionResponse,
@@ -49,6 +56,7 @@ _ingestion_status: Dict[str, RepositoryIngestionResponse] = {}
 async def ingest_python_repository(
     request: RepositoryIngestionRequest,
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_ingest_db),
     memos_client: MemOSClient = Depends(get_memos_client),
 ) -> RepositoryIngestionResponse:
     """
@@ -57,10 +65,14 @@ async def ingest_python_repository(
     This endpoint processes entire Python repositories, extracting code elements,
     generating embeddings, and storing everything in the memOS.as memory system
     with full observability and analysis.
+    
+    CRITICAL: Raw repository metadata is persisted to PostgreSQL BEFORE processing
+    to ensure 100% data retention (TN-CORE-101).
 
     Args:
         request: Repository ingestion request with source and configuration
         background_tasks: FastAPI background tasks for async processing
+        db: Synchronous database session for raw persistence
         memos_client: memOS.as client dependency
 
     Returns:
@@ -71,6 +83,60 @@ async def ingest_python_repository(
     """
     start_time = time.time()
     ingestion_id = uuid4()
+    
+    # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    # Serialize once and reuse for both size check and storage
+    payload_dict = request.model_dump(mode="json")
+    payload_json = json.dumps(payload_dict)
+    payload_size = len(payload_json.encode('utf-8'))
+    
+    if payload_size > settings.max_payload_size:
+        logger.warning(
+            f"Repository payload too large: {payload_size} bytes exceeds limit of {settings.max_payload_size} bytes"
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({settings.max_payload_size} bytes)"
+        )
+    
+    # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
+    # Write raw repository metadata to PostgreSQL BEFORE any processing
+    try:
+        raw_record = RawIngestion(
+            ingestion_id=ingestion_id,
+            source_type="python-repo",
+            content_type="repository",
+            raw_payload=payload_dict,
+            raw_metadata={
+                "repository_source": request.repository_source.value,
+                "source_path": request.source_path,
+                "max_files": request.max_files,
+                "max_file_size": request.max_file_size,
+                "include_patterns": request.include_patterns,
+                "exclude_patterns": request.exclude_patterns[:METADATA_LIST_TRUNCATION_LIMIT],  # First 5 for brevity
+            },
+            captured_at=datetime.now(timezone.utc),
+            processed=False,
+        )
+        db.add(raw_record)
+        db.commit()
+        
+        logger.info(f"Raw repository ingestion persisted: {ingestion_id} ({request.source_path})")
+        
+    except IntegrityError as e:
+        db.rollback()
+        logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ingestion {ingestion_id} already exists"
+        ) from e
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to persist raw repository ingestion: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist raw repository ingestion data"
+        ) from e
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
