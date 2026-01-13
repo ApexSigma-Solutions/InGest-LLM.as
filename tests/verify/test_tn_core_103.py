@@ -1,12 +1,14 @@
 import asyncio
 import json
 import pytest
-import httpx
+from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 from datetime import datetime
 from uuid import uuid4
 from ingest_llm_as.processors.conversation_ingestor import ConversationIngestor
-import asyncpg
+from ingest_llm_as.database.session import get_async_session
+from ingest_llm_as.db_models.raw_ingestion import RawIngestion
+from sqlalchemy import select
 
 @pytest.mark.asyncio
 async def test_conversation_ingestor_refactor():

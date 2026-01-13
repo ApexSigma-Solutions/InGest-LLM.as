@@ -4,15 +4,20 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import asyncpg
+from sqlalchemy import select
 
 from ingest_llm_as.config import get_settings
+from ingest_llm_as.database.session import get_async_session
+from ingest_llm_as.db_models.raw_ingestion import RawIngestion
 from ingest_llm_as.services.llm_summarizer import LLMSummarizer
 from ingest_llm_as.services.omegakg_client import OmegaKGClient
 from ingest_llm_as.services.vectorizer import generate_content_embedding
 from ingest_llm_as.models.knowledge_digest import create_conversation_digest
 
 logger = logging.getLogger(__name__)
+
+# Constants
+EMBEDDING_CONTEXT_MESSAGE_COUNT = 5  # Number of messages to include in embedding context
 
 class ConversationIngestor:
     """
@@ -26,7 +31,6 @@ class ConversationIngestor:
         self.summarizer = LLMSummarizer()
         self.omegakg_client = OmegaKGClient()
         self.running = False
-        self.db_url = self.settings.raw_db_url
 
     async def start(self):
         """Start the ingestion loop."""
@@ -228,19 +232,17 @@ class ConversationIngestor:
             # 4. REFACTORED: Call OmegaKG Validation API Gateway
             # Instead of direct Neo4j/pgvector writes, we delegate to the Gateway.
             try:
-                digest = create_conversation_digest(
-                    raw_payload=raw_data,
-                    summary=summary_content,
-                    vault_filepath=str(file_path),
-                    source_id=source_id,
-                    platform=platform,
-                    message_count=message_count,
-                    embedding=embedding,
-                    captured_at=captured_at
+                # Query for unprocessed conversation records using FOR UPDATE SKIP LOCKED
+                stmt = (
+                    select(RawIngestion)
+                    .where(RawIngestion.source_type == "conversation")
+                    .where(RawIngestion.processed == False)
+                    .limit(1)
+                    .with_for_update(skip_locked=True)
                 )
                 
-                logger.debug(f"Submitting digest for {source_id} to OmegaKG...")
-                response = await self.omegakg_client.validate_and_store(digest.model_dump(mode="json"))
+                result = await session.execute(stmt)
+                record = result.scalar_one_or_none()
                 
                 status = response.get("status")
                 if status in ["accepted", "duplicate"]:
@@ -255,11 +257,8 @@ class ConversationIngestor:
                         WHERE id = $1
                     """, record_id)
                     
-                    logger.info(f"Successfully processed {source_id}.")
-                    return 1
-                else:
-                    error_msg = response.get("message") or "Unknown validation error"
-                    logger.warning(f"OmegaKG rejected digest for {source_id}: {error_msg}")
+                    logger.debug(f"Submitting digest for {source_id} to OmegaKG...")
+                    response = await self.omegakg_client.validate_and_store(digest.model_dump(mode="json"))
                     
                     # Mark as processed with error to avoid infinite loop
                     await conn.execute("""
