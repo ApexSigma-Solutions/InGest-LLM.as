@@ -96,7 +96,7 @@ async def ingest_python_repository(
                 "max_files": request.max_files,
                 "max_file_size": request.max_file_size,
                 "include_patterns": request.include_patterns,
-                "exclude_patterns": request.exclude_patterns[:5],  # First 5 for brevity
+                "exclude_patterns": request.exclude_patterns[:METADATA_LIST_TRUNCATION_LIMIT],  # First 5 for brevity
             },
             captured_at=datetime.utcnow(),
             processed=False,
