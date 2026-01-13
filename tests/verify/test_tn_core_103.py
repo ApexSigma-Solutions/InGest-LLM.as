@@ -31,6 +31,7 @@ async def test_conversation_ingestor_refactor():
             try:
                 # Generate unique test ID
                 test_ingestion_id = uuid4()
+                test_platform = "ChatGPT"
                 
                 # Prepare test data matching raw_ingestions schema
                 raw_payload = {
@@ -39,11 +40,11 @@ async def test_conversation_ingestor_refactor():
                         {"role": "assistant", "content": "I am fine, thank you!"}
                     ],
                     "url": "http://test.com",
-                    "platform": "ChatGPT"
+                    "platform": test_platform
                 }
                 
                 raw_metadata = {
-                    "platform": "ChatGPT"
+                    "platform": test_platform
                 }
                 
                 # Clean up any existing test data

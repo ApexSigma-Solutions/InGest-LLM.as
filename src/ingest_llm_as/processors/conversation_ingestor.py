@@ -68,7 +68,8 @@ class ConversationIngestor:
 
             record_id = row['id']
             ingestion_id = row['ingestion_id']
-            raw_data = row['raw_payload']  # Already a dict in asyncpg
+            # asyncpg automatically deserializes JSONB columns to Python dicts
+            raw_data = row['raw_payload']
             raw_metadata = row['raw_metadata'] or {}
             source_type = row['source_type']
             captured_at = row['captured_at']
