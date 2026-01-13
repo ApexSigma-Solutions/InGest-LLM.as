@@ -29,9 +29,21 @@ async def test_conversation_ingestor_refactor():
             conn = await asyncpg.connect(db_url)
             
             try:
-                # Generate unique test ID
-                test_ingestion_id = uuid4()
-                test_platform = "ChatGPT"
+                # Cleanup and insert test data
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS raw_ingestions (
+                        ingestion_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        source_id VARCHAR(255) UNIQUE NOT NULL,
+                        platform VARCHAR(50),
+                        raw_payload JSONB NOT NULL,
+                        captured_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        processed BOOLEAN NOT NULL DEFAULT FALSE,
+                        processed_at TIMESTAMP,
+                        processing_attempts INTEGER NOT NULL DEFAULT 0,
+                        last_error TEXT
+                    )
+                """)
+                await conn.execute("DELETE FROM raw_conversations WHERE source_id = 'test-refactor-123'")
                 
                 # Prepare test data matching raw_ingestions schema
                 raw_payload = {

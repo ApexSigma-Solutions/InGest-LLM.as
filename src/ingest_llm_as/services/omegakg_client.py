@@ -6,6 +6,7 @@ import httpx
 import logging
 import asyncio
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 from ingest_llm_as.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,29 @@ class OmegaKGClient:
         self.base_url = self.settings.omegakg_api_url
         self.token = self.settings.bws_access_token or self.settings.static_service_token
         self.timeout = httpx.Timeout(30.0, connect=5.0)
+        
+        # SECURITY: Validate HTTPS usage when token authentication is enabled
+        if self.token and self.base_url:
+            parsed = urlparse(self.base_url)
+            scheme = parsed.scheme.lower()
+            hostname = parsed.hostname or ''
+            
+            # Check if using HTTP (not HTTPS) with non-localhost hostname
+            is_localhost = hostname in ('localhost', '127.0.0.1', '::1')
+            is_insecure_http = (scheme == 'http') and not is_localhost
+            
+            if is_insecure_http:
+                # Using HTTP with authentication outside of localhost is a security risk
+                logger.warning(
+                    "SECURITY WARNING: OmegaKG API URL uses HTTP (not HTTPS) with authentication. "
+                    f"Token transmission is vulnerable to interception: {self.base_url}"
+                )
+                # In production environments, we should enforce HTTPS
+                if self.settings.debug is False:
+                    raise ValueError(
+                        "SECURITY ERROR: Cannot use HTTP (non-HTTPS) URL for OmegaKG API "
+                        "with authentication in production. Use HTTPS to protect bearer tokens."
+                    )
         
         headers = {
             "Content-Type": "application/json",

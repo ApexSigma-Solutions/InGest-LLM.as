@@ -190,12 +190,12 @@ class TestRepositoryIngestionRawPersistence:
             raw_record = test_db_session.query(RawIngestion).filter_by(
                 ingestion_id=ingestion_id
             ).first()
-            
+
             assert raw_record is not None
             assert raw_record.source_type == "python-repo"
             assert raw_record.content_type == "repository"
-            assert raw_record.metadata["source_path"] == "/tmp/test-repo"
-            assert raw_record.metadata["max_files"] == 100
+            assert raw_record.raw_metadata["source_path"] == "/tmp/test-repo"
+            assert raw_record.raw_metadata["max_files"] == 100
 
 
 class TestRawPersistenceRecovery:
