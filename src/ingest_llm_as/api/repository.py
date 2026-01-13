@@ -129,14 +129,14 @@ async def ingest_python_repository(
         raise HTTPException(
             status_code=409,
             detail=f"Ingestion {ingestion_id} already exists"
-        )
+        ) from e
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to persist raw repository ingestion: {e}")
         raise HTTPException(
             status_code=500,
             detail="Failed to persist raw repository ingestion data"
-        )
+        ) from e
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()

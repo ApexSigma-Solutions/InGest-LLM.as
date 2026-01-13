@@ -10,7 +10,7 @@ import time
 import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
@@ -395,7 +395,7 @@ async def ingest_file(
                     "filename": filename,
                     "original_content_type": file.content_type,
                 },
-                captured_at=datetime.utcnow(),
+                captured_at=datetime.now(timezone.utc),
                 processed=False,
             )
             db.add(raw_record)
