@@ -99,10 +99,12 @@ async def ingest_text(
     print("DEBUG ingest_text: Endpoint called")
     start_time = time.time()
     ingestion_id = uuid4()
-    
+
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw data to PostgreSQL BEFORE any processing to ensure data retention
     try:
+        from datetime import timezone
+
         raw_record = RawIngestion(
             ingestion_id=ingestion_id,
             source_type="text",
@@ -114,28 +116,28 @@ async def ingest_text(
                 "source_url": request.metadata.source_url,
                 "title": request.metadata.title,
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
         db.commit()
-        
-        logger.info(f"Raw ingestion persisted: {ingestion_id}")
-        
-    except IntegrityError as e:
+
+        logger.info("Raw ingestion persisted: %s", ingestion_id)
+
+    except IntegrityError:
         db.rollback()
-        logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
+        logger.warning("Duplicate ingestion ID: %s", ingestion_id)
         raise HTTPException(
             status_code=409,
-            detail=f"Ingestion {ingestion_id} already exists"
-        )
+            detail=f"Ingestion {ingestion_id} already exists",
+        ) from None
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to persist raw ingestion: {e}")
+        logger.exception("Failed to persist raw ingestion: %s", e)
         raise HTTPException(
             status_code=500,
-            detail="Failed to persist raw ingestion data"
-        )
+            detail="Failed to persist raw ingestion data",
+        ) from e
 
     # Initialize Langfuse tracing
     langfuse_client = get_langfuse_client()
