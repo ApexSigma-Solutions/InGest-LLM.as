@@ -98,7 +98,7 @@ async def ingest_python_repository(
                 "include_patterns": request.include_patterns,
                 "exclude_patterns": request.exclude_patterns[:METADATA_LIST_TRUNCATION_LIMIT],  # First 5 for brevity
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
