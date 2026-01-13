@@ -100,6 +100,20 @@ async def ingest_text(
     start_time = time.time()
     ingestion_id = uuid4()
     
+    # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    payload_dict = request.model_dump(mode="json")
+    payload_json = str(payload_dict)  # Approximate serialized size
+    payload_size = len(payload_json.encode('utf-8'))
+    
+    if payload_size > settings.max_payload_size:
+        logger.warning(
+            f"Payload too large: {payload_size} bytes exceeds limit of {settings.max_payload_size} bytes"
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({settings.max_payload_size} bytes)"
+        )
+    
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw data to PostgreSQL BEFORE any processing to ensure data retention
     try:
@@ -107,7 +121,7 @@ async def ingest_text(
             ingestion_id=ingestion_id,
             source_type="text",
             content_type=request.metadata.content_type.value,
-            raw_payload=request.model_dump(mode="json"),
+            raw_payload=payload_dict,
             raw_metadata={
                 "source": request.metadata.source.value,
                 "tags": request.metadata.tags,

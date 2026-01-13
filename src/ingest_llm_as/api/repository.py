@@ -82,6 +82,21 @@ async def ingest_python_repository(
     start_time = time.time()
     ingestion_id = uuid4()
     
+    # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    from ..config import settings as config_settings
+    payload_dict = request.model_dump(mode="json")
+    payload_json = str(payload_dict)  # Approximate serialized size
+    payload_size = len(payload_json.encode('utf-8'))
+    
+    if payload_size > config_settings.max_payload_size:
+        logger.warning(
+            f"Repository payload too large: {payload_size} bytes exceeds limit of {config_settings.max_payload_size} bytes"
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({config_settings.max_payload_size} bytes)"
+        )
+    
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw repository metadata to PostgreSQL BEFORE any processing
     try:
@@ -89,7 +104,7 @@ async def ingest_python_repository(
             ingestion_id=ingestion_id,
             source_type="python-repo",
             content_type="repository",
-            raw_payload=request.model_dump(mode="json"),
+            raw_payload=payload_dict,
             raw_metadata={
                 "repository_source": request.repository_source.value,
                 "source_path": request.source_path,

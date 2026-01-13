@@ -24,6 +24,24 @@ class OmegaKGClient:
         self.token = self.settings.bws_access_token or self.settings.static_service_token
         self.timeout = httpx.Timeout(30.0, connect=5.0)
         
+        # SECURITY: Validate HTTPS usage when token authentication is enabled
+        if self.token and self.base_url:
+            parsed_url = self.base_url.lower()
+            is_http = parsed_url.startswith('http://') and not parsed_url.startswith('http://localhost') and not parsed_url.startswith('http://127.0.0.1')
+            
+            if is_http:
+                # Using HTTP with authentication outside of localhost is a security risk
+                logger.warning(
+                    "SECURITY WARNING: OmegaKG API URL uses HTTP (not HTTPS) with authentication. "
+                    f"Token transmission is vulnerable to interception: {self.base_url}"
+                )
+                # In production environments, we should enforce HTTPS
+                if self.settings.debug is False:
+                    raise ValueError(
+                        "SECURITY ERROR: Cannot use HTTP (non-HTTPS) URL for OmegaKG API "
+                        "with authentication in production. Use HTTPS to protect bearer tokens."
+                    )
+        
         headers = {
             "Content-Type": "application/json",
         }
