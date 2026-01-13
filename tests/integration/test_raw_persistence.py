@@ -71,7 +71,7 @@ class TestTextIngestionRawPersistence:
         assert raw_record.source_type == "text"
         assert raw_record.content_type == "text"
         assert raw_record.raw_payload["content"] == payload["content"]
-        assert raw_record.metadata["tags"] == ["test", "python"]
+        assert raw_record.raw_metadata["tags"] == ["test", "python"]
         assert raw_record.processed == False
         assert raw_record.file_data is None
     
@@ -194,8 +194,8 @@ class TestRepositoryIngestionRawPersistence:
             assert raw_record is not None
             assert raw_record.source_type == "python-repo"
             assert raw_record.content_type == "repository"
-            assert raw_record.metadata["source_path"] == "/tmp/test-repo"
-            assert raw_record.metadata["max_files"] == 100
+            assert raw_record.raw_metadata["source_path"] == "/tmp/test-repo"
+            assert raw_record.raw_metadata["max_files"] == 100
 
 
 class TestRawPersistenceRecovery:
