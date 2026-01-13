@@ -85,7 +85,7 @@ class ConversationIngestor:
             
             # 3. Generate Embedding (Vector)
             conversation_text = f"Platform: {platform}\nSummary: {summary_content}\n"
-            for msg in messages[:5]: # Include context from first 5 msgs
+            for msg in messages[:EMBEDDING_CONTEXT_MESSAGE_COUNT]: # Include context from first 5 msgs
                 conversation_text += f"{msg.get('role', '')}: {msg.get('content', '')[:200]}\n"
             
             embedding = await generate_content_embedding(conversation_text, content_type="text")
