@@ -5,6 +5,7 @@ This module implements the core ingestion endpoints for processing
 and storing content in the memOS.as memory system.
 """
 
+import json
 import time
 import traceback
 from typing import List, Optional
@@ -109,7 +110,7 @@ async def ingest_text(
             ingestion_id=ingestion_id,
             source_type="text",
             content_type=request.metadata.content_type.value,
-            raw_payload=request.model_dump(mode="json"),
+            raw_payload=payload_dict,
             raw_metadata={
                 "source": request.metadata.source.value,
                 "tags": request.metadata.tags,
