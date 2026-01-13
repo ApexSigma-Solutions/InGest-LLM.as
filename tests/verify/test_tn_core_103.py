@@ -1,11 +1,13 @@
 import asyncio
 import json
 import pytest
-import httpx
+from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 from datetime import datetime
 from ingest_llm_as.processors.conversation_ingestor import ConversationIngestor
-import asyncpg
+from ingest_llm_as.database.session import get_async_session
+from ingest_llm_as.db_models.raw_ingestion import RawIngestion
+from sqlalchemy import select
 
 @pytest.mark.asyncio
 async def test_conversation_ingestor_refactor():
@@ -23,57 +25,69 @@ async def test_conversation_ingestor_refactor():
             
             ingestor = ConversationIngestor()
             
-            # Setup DB record
-            db_url = ingestor.settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
-            conn = await asyncpg.connect(db_url)
-            
-            try:
-                # Cleanup and insert test data
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS raw_conversations (
-                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                        source_id VARCHAR(255) UNIQUE NOT NULL,
-                        platform VARCHAR(50),
-                        raw_payload JSONB NOT NULL,
-                        captured_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                        processed BOOLEAN NOT NULL DEFAULT FALSE,
-                        processed_at TIMESTAMP,
-                        processing_attempts INTEGER NOT NULL DEFAULT 0,
-                        last_error TEXT
+            # Setup DB record using SQLAlchemy async session
+            async for session in get_async_session():
+                try:
+                    # Cleanup existing test data
+                    stmt = select(RawIngestion).where(
+                        RawIngestion.raw_metadata['source_id'].astext == 'test-refactor-123'
                     )
-                """)
-                await conn.execute("DELETE FROM raw_conversations WHERE source_id = 'test-refactor-123'")
-                
-                raw_payload = {
-                    "messages": [
-                        {"role": "user", "content": "Hello, how are you?"},
-                        {"role": "assistant", "content": "I am fine, thank you!"}
-                    ],
-                    "url": "http://test.com"
-                }
-                
-                await conn.execute("""
-                    INSERT INTO raw_conversations (source_id, platform, raw_payload, captured_at, processed)
-                    VALUES ($1, $2, $3, $4, FALSE)
-                """, 'test-refactor-123', 'ChatGPT', json.dumps(raw_payload), datetime.utcnow())
-                
-                # 4. Run Process
-                processed_count = await ingestor.process_pending_conversations()
-                
-                # 5. Assertions
-                assert processed_count == 1
-                assert mock_validate.called
-                
-                # Verify record is marked processed in DB
-                row = await conn.fetchrow("SELECT processed, last_error FROM raw_conversations WHERE source_id = 'test-refactor-123'")
-                assert row['processed'] is True
-                assert row['last_error'] is None
-                
-                print("\n✅ TN-CORE-103 Verification Passed: Ingestor called validation API and updated DB.")
-                
-            finally:
-                await conn.execute("DELETE FROM raw_conversations WHERE source_id = 'test-refactor-123'")
-                await conn.close()
+                    result = await session.execute(stmt)
+                    existing = result.scalars().all()
+                    for record in existing:
+                        await session.delete(record)
+                    await session.commit()
+                    
+                    # Prepare test conversation data
+                    raw_payload = {
+                        "messages": [
+                            {"role": "user", "content": "Hello, how are you?"},
+                            {"role": "assistant", "content": "I am fine, thank you!"}
+                        ],
+                        "url": "http://test.com"
+                    }
+                    
+                    # Insert test conversation record into raw_ingestions
+                    test_record = RawIngestion(
+                        ingestion_id=uuid4(),
+                        source_type="conversation",
+                        content_type="conversation",
+                        raw_payload=raw_payload,
+                        raw_metadata={
+                            "source_id": "test-refactor-123",
+                            "platform": "ChatGPT"
+                        },
+                        captured_at=datetime.utcnow(),
+                        processed=False,
+                    )
+                    session.add(test_record)
+                    await session.commit()
+                    record_id = test_record.id
+                    
+                    # 4. Run Process
+                    processed_count = await ingestor.process_pending_conversations()
+                    
+                    # 5. Assertions
+                    assert processed_count == 1
+                    assert mock_validate.called
+                    
+                    # Verify record is marked processed in DB
+                    await session.refresh(test_record)
+                    assert test_record.processed is True
+                    assert test_record.last_error is None
+                    
+                    print("\n✅ TN-CORE-103 Verification Passed: Ingestor called validation API and updated DB.")
+                    
+                finally:
+                    # Cleanup
+                    stmt = select(RawIngestion).where(
+                        RawIngestion.raw_metadata['source_id'].astext == 'test-refactor-123'
+                    )
+                    result = await session.execute(stmt)
+                    existing = result.scalars().all()
+                    for record in existing:
+                        await session.delete(record)
+                    await session.commit()
 
 if __name__ == "__main__":
     asyncio.run(test_conversation_ingestor_refactor())

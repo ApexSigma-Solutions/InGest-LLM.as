@@ -806,32 +806,42 @@ def _determine_memory_tier(content_type) -> MemoryTier:
 @router.get("/queue", response_model=QueueStatus)
 async def get_queue_status():
     """
-    Get current status of the conversation ingestion queue.
+    Get current status of the conversation ingestion queue from unified raw_ingestions table.
     """
-    db_url = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
-    conn = await asyncpg.connect(db_url)
-    try:
-        # Get counts
-        stats = await conn.fetchrow("""
-            SELECT 
-                COUNT(*) FILTER (WHERE processed = FALSE) as pending,
-                COUNT(*) FILTER (WHERE processed = TRUE) as processed,
-                COUNT(*) as total,
-                EXTRACT(EPOCH FROM (NOW() - MIN(captured_at) FILTER (WHERE processed = FALSE))) as oldest_age
-            FROM raw_conversations
-        """)
-
-        return QueueStatus(
-            pending_count=stats["pending"] or 0,
-            processed_count=stats["processed"] or 0,
-            total_count=stats["total"] or 0,
-            oldest_pending_age_seconds=stats["oldest_age"],
-        )
-    except Exception as e:
-        logger.error(f"Queue status check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        await conn.close()
+    # Use SQLAlchemy for unified data access
+    from sqlalchemy import func, case
+    from ..database.session import get_async_session
+    from ..db_models.raw_ingestion import RawIngestion
+    
+    async for session in get_async_session():
+        try:
+            # Get counts for conversation source type
+            stats = await session.execute(
+                select(
+                    func.count().filter(RawIngestion.processed == False).label("pending"),
+                    func.count().filter(RawIngestion.processed == True).label("processed"),
+                    func.count().label("total"),
+                    func.extract(
+                        "epoch",
+                        func.now() - func.min(
+                            case((RawIngestion.processed == False, RawIngestion.captured_at))
+                        )
+                    ).label("oldest_age")
+                )
+                .where(RawIngestion.source_type == "conversation")
+            )
+            
+            result = stats.one()
+            
+            return QueueStatus(
+                pending_count=result.pending or 0,
+                processed_count=result.processed or 0,
+                total_count=result.total or 0,
+                oldest_pending_age_seconds=result.oldest_age,
+            )
+        except Exception as e:
+            logger.error(f"Queue status check failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/status/{ingestion_id}")
