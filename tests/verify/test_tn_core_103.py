@@ -62,7 +62,6 @@ async def test_conversation_ingestor_refactor():
                     )
                     session.add(test_record)
                     await session.commit()
-                    record_id = test_record.id
                     
                     # 4. Run Process
                     processed_count = await ingestor.process_pending_conversations()

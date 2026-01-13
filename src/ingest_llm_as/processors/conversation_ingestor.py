@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ingest_llm_as.config import get_settings
 from ingest_llm_as.database.session import get_async_session
