@@ -5,6 +5,7 @@ This module implements endpoints for ingesting and analyzing Python repositories
 including local directories, Git repositories, and comprehensive project analysis.
 """
 
+import json
 import time
 from typing import Dict, Any
 from uuid import uuid4
@@ -14,6 +15,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from ..config import settings
 from ..database.session import get_ingest_db
 from ..db_models.raw_ingestion import RawIngestion
 from ..models import (
@@ -82,6 +84,21 @@ async def ingest_python_repository(
     start_time = time.time()
     ingestion_id = uuid4()
     
+    # SECURITY: Validate total payload size to prevent resource exhaustion (DoS)
+    # Serialize once and reuse for both size check and storage
+    payload_dict = request.model_dump(mode="json")
+    payload_json = json.dumps(payload_dict)
+    payload_size = len(payload_json.encode('utf-8'))
+    
+    if payload_size > settings.max_payload_size:
+        logger.warning(
+            f"Repository payload too large: {payload_size} bytes exceeds limit of {settings.max_payload_size} bytes"
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=f"Payload size ({payload_size} bytes) exceeds maximum allowed ({settings.max_payload_size} bytes)"
+        )
+    
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw repository metadata to PostgreSQL BEFORE any processing
     try:
@@ -89,16 +106,16 @@ async def ingest_python_repository(
             ingestion_id=ingestion_id,
             source_type="python-repo",
             content_type="repository",
-            raw_payload=request.model_dump(mode="json"),
+            raw_payload=payload_dict,
             raw_metadata={
                 "repository_source": request.repository_source.value,
                 "source_path": request.source_path,
                 "max_files": request.max_files,
                 "max_file_size": request.max_file_size,
                 "include_patterns": request.include_patterns,
-                "exclude_patterns": request.exclude_patterns[:5],  # First 5 for brevity
+                "exclude_patterns": request.exclude_patterns[:METADATA_LIST_TRUNCATION_LIMIT],  # First 5 for brevity
             },
-            captured_at=datetime.utcnow(),
+            captured_at=datetime.now(timezone.utc),
             processed=False,
         )
         db.add(raw_record)
