@@ -339,7 +339,7 @@ async def ingest_file(
 
         # Create metadata
         metadata = IngestionMetadata(
-            source=SourceType.USER_UPLOAD,
+            source=SourceType.UPLOAD,
             content_type=ContentType.DOCUMENTATION,
             source_url=filename,
             title=filename,
