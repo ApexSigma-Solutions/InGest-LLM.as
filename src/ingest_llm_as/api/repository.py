@@ -9,7 +9,7 @@ import json
 import time
 from typing import Dict, Any
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
