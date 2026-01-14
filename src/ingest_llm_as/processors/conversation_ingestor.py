@@ -48,14 +48,14 @@ class ConversationIngestor:
         db_url = self.settings.raw_db_url.replace(
             "postgresql+asyncpg://", "postgresql://"
         )
-        conn = await asyncpg.connect(db_url)
+        conn = await asyncpg.connect(db_url, timeout=30.0)
         source_id = None  # Initialize for error handling
 
         try:
             row = await conn.fetchrow("""
-                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at 
-                FROM raw_ingestions 
-                WHERE processed = FALSE 
+                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at, platform
+                FROM raw_ingestions
+                WHERE processed = FALSE
                 AND source_type = 'conversation'
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -114,8 +114,8 @@ class ConversationIngestor:
             # 4. Update Record (Mark Processed)
             await conn.execute(
                 """
-                UPDATE raw_conversations 
-                SET processed = TRUE, 
+                UPDATE raw_ingestions
+                SET processed = TRUE,
                     processed_at = NOW()
                 WHERE id = $1
             """,

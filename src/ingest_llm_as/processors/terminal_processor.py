@@ -47,7 +47,7 @@ class TerminalProcessor:
         db_url = self.settings.raw_db_url.replace(
             "postgresql+asyncpg://", "postgresql://"
         )
-        conn = await asyncpg.connect(db_url)
+        conn = await asyncpg.connect(db_url, timeout=30.0)
 
         try:
             rows = await conn.fetch("""
