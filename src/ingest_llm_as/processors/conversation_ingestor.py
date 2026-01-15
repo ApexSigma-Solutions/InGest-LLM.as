@@ -53,7 +53,7 @@ class ConversationIngestor:
 
         try:
             row = await conn.fetchrow("""
-                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at, platform
+                SELECT id, ingestion_id, source_type, raw_payload, raw_metadata, captured_at
                 FROM raw_ingestions
                 WHERE processed = FALSE
                 AND source_type = 'conversation'
@@ -67,7 +67,8 @@ class ConversationIngestor:
             record_id = row["id"]
             source_id = row.get("source_id", row.get("ingestion_id", "unknown"))
             raw_data = json.loads(row["raw_payload"])
-            platform = row["platform"]
+            raw_metadata = row.get("raw_metadata", {})
+            platform = raw_metadata.get("platform", "unknown")
             captured_at = row["captured_at"]
 
             logger.info(f"Processing conversation: {source_id}")

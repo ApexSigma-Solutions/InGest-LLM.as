@@ -164,6 +164,15 @@ class MemOSClient:
 
             # Parse response
             response_data = response.json()
+
+            # Check if memOS returned an error response
+            # Error responses have {'status': 'error', 'message': '...'} format
+            if response_data.get("status") == "error":
+                error_msg = response_data.get("message", "Unknown memOS error")
+                logger.warning(f"memOS.as returned error: {error_msg}")
+                raise MemOSAPIError(f"memOS.as error: {error_msg}")
+
+            # Validate and return success response
             return MemoryStorageResponse(**response_data)
 
         except httpx.RequestError as e:
@@ -172,6 +181,9 @@ class MemOSClient:
             raise MemOSAPIError(f"memOS.as HTTP error: {e}")
         except ValidationError as e:
             logger.error(f"Invalid response from memOS.as: {e}")
+            raise
+        except MemOSAPIError:
+            # Re-raise our own API errors without wrapping
             raise
         except Exception as e:
             logger.error(f"Unexpected error storing memory: {e}")
