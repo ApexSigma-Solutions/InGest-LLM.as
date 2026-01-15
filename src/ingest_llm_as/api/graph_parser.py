@@ -10,19 +10,27 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, UploadFile, File as FastAPIFile
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    UploadFile,
+    File as FastAPIFile,
+    Form,
+    File,
+)
 from pydantic import BaseModel, Field
 
 from ingest_llm_as.parsers.document_parser import DocumentParser
 from ingest_llm_as.services.file_loader_service import FileLoaderService
+from src.shared.system_health import SystemHealth
 
 logger = logging.getLogger(__name__)
 
 # Create router for graph parser endpoints
 router = APIRouter(prefix="/graph", tags=["Graph Parser"])
 
-# Global parser instance (loaded at startup)
-_parser: DocumentParser | None = None
+# Parser cache: model_name -> DocumentParser instance
+_parsers: Dict[str, DocumentParser] = {}
 
 
 class ParseRequest(BaseModel):
@@ -54,27 +62,38 @@ class HealthResponse(BaseModel):
     model_name: str = Field(description="Name of loaded Spacy model")
 
 
-def get_parser() -> DocumentParser:
+def get_parser(model_name: str | None = None) -> DocumentParser:
     """
-    Get or create global parser instance.
+    Get or create parser instance for the specified model.
+    Defaults to 'en_core_web_sm' if not specified or available.
+
+    Args:
+        model_name: Specific spacy model name (e.g., 'en_core_web_trf')
 
     Returns:
         DocumentParser instance
-
-    Raises:
-        RuntimeError: If parser cannot be initialized
     """
-    global _parser
+    global _parsers
 
-    if _parser is None:
+    # Default fallback
+    target_model = model_name or "en_core_web_sm"
+
+    if target_model not in _parsers:
         try:
-            _parser = DocumentParser()
-            logger.info("DocumentParser initialized successfully")
+            logger.info(f"Initializing DocumentParser with model: {target_model}")
+            parser = DocumentParser(model_name=target_model)
+            _parsers[target_model] = parser
+            logger.info(f"DocumentParser ({target_model}) initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize DocumentParser: {e}")
-            raise RuntimeError(f"DocumentParser initialization failed: {e}")
+            logger.error(f"Failed to initialize parser for {target_model}: {e}")
+            # Fallback to existing if any
+            if _parsers:
+                fallback = next(iter(_parsers.values()))
+                logger.warning(f"Falling back to loaded parser: {fallback.model_name}")
+                return fallback
+            raise RuntimeError(f"Parser initialization failed: {e}")
 
-    return _parser
+    return _parsers[target_model]
 
 
 @router.post("/parse", response_model=ParseResponse, tags=["nlp", "graph"])
@@ -83,23 +102,20 @@ async def parse_text(request: ParseRequest) -> ParseResponse:
     Parse text into a Knowledge Graph structure.
 
     Args:
-        request: ParseRequest containing text and optional config
+        request: ParseRequest containing text and optional config.
+                 Config can contain 'model_name'.
 
     Returns:
         ParseResponse with nodes and edges
-
-    Raises:
-        HTTPException: If parsing fails
-
-    Note:
-        Large documents (>10,000 characters) may take 10-30 seconds to process.
-        Consider increasing client timeout or splitting into smaller chunks.
     """
     try:
-        parser = get_parser()
+        model_name = request.config.get("model_name")
+        parser = get_parser(model_name)
 
         text_length = len(request.text)
-        logger.info(f"Parsing text ({text_length} characters)")
+        logger.info(
+            "Parsing text (%s chars) with model %s", text_length, parser.model_name
+        )
 
         # Warn about large documents
         if text_length > 50000:
@@ -118,9 +134,12 @@ async def parse_text(request: ParseRequest) -> ParseResponse:
                 "processing may take 10-30s. Increase client timeout if needed."
             )
 
+        result["metadata"]["model_used"] = parser.model_name
+
         logger.info(
-            f"✅ Parsed into {len(result['nodes'])} nodes and "
-            f"{len(result['edges'])} edges"
+            "✅ Parsed into %s nodes and %s edges",
+            len(result["nodes"]),
+            len(result["edges"]),
         )
 
         return ParseResponse(
@@ -130,128 +149,118 @@ async def parse_text(request: ParseRequest) -> ParseResponse:
         )
 
     except Exception as e:
-        logger.error(f"❌ Parsing failed: {str(e)}")
+        logger.error("❌ Parsing failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Parsing failed: {str(e)}")
 
 
-@router.post("/parse/file", response_model=ParseResponse, tags=["nlp", "graph", "file-upload"])
+@router.post(
+    "/parse/file", response_model=ParseResponse, tags=["nlp", "graph", "file-upload"]
+)
 async def parse_file(
-    file: UploadFile = FastAPIFile(..., description="Document file to parse (TXT, MD, PDF, DOCX)")
+    file: UploadFile = FastAPIFile(
+        ..., description="Document file to parse (TXT, MD, PDF, DOCX)"
+    ),
+    model_name: str = Form(
+        None, description="Spacy model to use (e.g., en_core_web_trf)"
+    ),
 ) -> ParseResponse:
     """
     Parse uploaded file into a Knowledge Graph structure.
-    
-    Accepts file uploads and extracts text before parsing into nodes/edges.
-    Supported formats: TXT, MD, PDF, DOCX
-    
+
     Args:
         file: Uploaded file object
-        
+        model_name: Optional model selection (Form field)
+
     Returns:
         ParseResponse with nodes and edges
-        
-    Raises:
-        HTTPException: If file processing or parsing fails
-        
-    Note:
-        Large documents (>10,000 characters) may take 10-30 seconds to process.
-        Consider increasing client timeout or splitting into smaller chunks.
     """
     try:
         # Read file content
         content_bytes = await file.read()
         filename = file.filename or "unknown"
-        
-        logger.info(f"Processing uploaded file: {filename} ({len(content_bytes)} bytes)")
-        
-        # Determine MIME type from file extension or content_type
         mime_type = file.content_type or "text/plain"
-        
-        # Handle text files directly (TXT, MD)
-        if mime_type.startswith("text/") or filename.lower().endswith((".txt", ".md")):
-            try:
-                extracted_text = content_bytes.decode("utf-8")
-            except UnicodeDecodeError:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"File '{filename}' is not valid UTF-8 text."
-                )
-        else:
-            # Use FileLoaderService for binary formats (PDF, DOCX, HTML)
-            file_loader = FileLoaderService()
-            extracted_text = file_loader.load(content_bytes, mime_type=mime_type)
-        
+
+        logger.info(
+            f"Processing uploaded file: {filename} ({len(content_bytes)} bytes) Model: {model_name}"
+        )
+
+        # Rewind file for FileLoaderService if used
+        await file.seek(0)
+
+        # Use new FileLoaderService to extract text
+        try:
+            # Re-wrap bytes not trivial, rely on FileLoaderService taking UploadFile
+            # Since we read it, we must seek(0) which we did.
+            extracted_text = await FileLoaderService.process_file(file)
+        except Exception as e:
+            logger.error(f"Extraction failed: {e}")
+            raise HTTPException(status_code=422, detail=f"Text extraction failed: {e}")
+
         if not extracted_text or not extracted_text.strip():
             raise HTTPException(
-                status_code=422, 
-                detail=f"Could not extract text from file '{filename}'. "
-                       f"Ensure file is not empty and format is supported (TXT, MD, PDF, DOCX)."
+                status_code=422,
+                detail=f"Could not extract text from file '{filename}'.",
             )
-        
+
         text_length = len(extracted_text)
-        logger.info(f"Extracted {text_length} characters from {filename}")
-        
+        logger.info("Extracted %s characters from %s", text_length, filename)
+
         # Parse extracted text
-        parser = get_parser()
-        
+        parser = get_parser(model_name)
+
         if text_length > 50000:
             logger.warning(
                 f"Large document detected ({text_length} chars). "
                 "This may take 30+ seconds. Consider chunking."
             )
-        
+
         result = parser.parse(extracted_text)
-        
+
         # Add filename to metadata
         result["metadata"]["source_file"] = filename
         result["metadata"]["file_size_bytes"] = len(content_bytes)
         result["metadata"]["extracted_text_length"] = text_length
-        
+        result["metadata"]["model_used"] = parser.model_name
+
         # Add processing time warning if document is large
         if text_length > 10000:
             result["metadata"]["warning"] = (
                 f"Large document ({text_length} chars) - "
                 "processing may take 10-30s. Increase client timeout if needed."
             )
-        
+
         logger.info(
-            f"✅ Parsed {filename} into {len(result['nodes'])} nodes and "
-            f"{len(result['edges'])} edges"
+            "✅ Parsed %s into %s nodes and %s edges",
+            filename,
+            len(result["nodes"]),
+            len(result["edges"]),
         )
-        
+
         return ParseResponse(
             metadata=result["metadata"],
             nodes=result["nodes"],
             edges=result["edges"],
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ File parsing failed: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"File parsing failed: {str(e)}"
-        )
+        logger.exception(f"❌ File parsing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File parsing failed: {str(e)}")
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
 async def health_check() -> HealthResponse:
     """
     Health check endpoint.
-
-    Returns:
-        HealthResponse with service status and model information
+    Checks status of default/active parsers.
     """
     try:
-        parser = get_parser()
+        # Check if any parser is loaded, or try to load default
+        parser = get_parser()  # Defaults to sm if none
 
-        # Check if parser is initialized
         model_loaded = parser.nlp is not None
-
         status = "ready" if model_loaded else "error"
-
-        logger.info(f"Health check: status={status}, model_loaded={model_loaded}")
 
         return HealthResponse(
             status=status,
@@ -260,5 +269,41 @@ async def health_check() -> HealthResponse:
         )
 
     except Exception as e:
-        logger.error(f"❌ Health check failed: {str(e)}")
+        logger.error("❌ Health check failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+
+
+@router.post("/upload/digest")
+async def digest_document(file: UploadFile = File(...), persist: bool = Form(False)):
+    """
+    1. Checks System Health (Metal).
+    2. Digests File (Stomach).
+    3. Returns Text (Nutrients).
+    """
+
+    # 1. Check Metal
+    if not SystemHealth.is_healthy():
+        raise HTTPException(
+            status_code=503,
+            detail="System Overloaded. RAM usage too high for ingestion.",
+        )
+
+    if not file:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    # 2. Digest
+    try:
+        await file.seek(0)
+        raw_text = await FileLoaderService.process_file(file)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # 3. Response
+    return {
+        "status": "success",
+        "filename": file.filename,
+        "file_size_kb": round(file.size / 1024, 2),
+        "system_vitals": SystemHealth.check_vitals(),  # Return vitals so you can see them!
+        "character_count": len(raw_text),
+        "preview": raw_text[:500] + "...",
+    }

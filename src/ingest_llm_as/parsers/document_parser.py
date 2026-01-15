@@ -64,10 +64,10 @@ class DocumentParser:
         for attempt_model in models_to_try:
             try:
                 self.nlp = spacy.load(attempt_model)
-                logger.info(f"Loaded Spacy model: {attempt_model}")
+                logger.info("Loaded Spacy model: %s", attempt_model)
                 return  # Success - exit early
             except OSError as e:
-                logger.warning(f"Failed to load Spacy model '{attempt_model}': {e}")
+                logger.warning("Failed to load Spacy model '%s': %s", attempt_model, e)
                 if attempt_model != models_to_try[-1]:
                     logger.info("Trying next model in priority list...")
                     continue
@@ -88,7 +88,7 @@ class DocumentParser:
                         "Install with: python -m spacy download <model_name>"
                     ) from e
             except Exception as e:
-                logger.error(f"Unexpected error loading Spacy model: {e}")
+                logger.error("Unexpected error loading Spacy model: %s", e)
                 raise
 
     def preprocess(self, text: str) -> List[str]:
@@ -110,7 +110,7 @@ class DocumentParser:
         try:
             import nltk
         except ImportError as e:
-            logger.error(f"NLTK not installed: {e}")
+            logger.error("NLTK not installed: %s", e)
             logger.error("Please install NLTK: pip install nltk")
             logger.error("Download NLTK data: python -m nltk.downloader punkt")
             raise ImportError(
@@ -124,14 +124,14 @@ class DocumentParser:
         try:
             sentences: List[str] = nltk.sent_tokenize(cleaned_text)
         except LookupError as e:
-            logger.error(f"NLTK punkt tokenizer not found: {e}")
+            logger.error("NLTK punkt tokenizer not found: %s", e)
             logger.error("Download NLTK data: python -m nltk.downloader punkt")
             raise ImportError(
                 "NLTK punkt tokenizer not found. "
                 "Download with: python -m nltk.downloader punkt"
             ) from e
 
-        logger.debug(f"Preprocessed text into {len(sentences)} sentences")
+        logger.debug("Preprocessed text into %s sentences", len(sentences))
         return sentences
 
     def _expand_compound_noun(self, token: Any) -> str:
@@ -163,7 +163,9 @@ class DocumentParser:
 
         return " ".join([t.text for t in compound_tokens])
 
-    def extract_relations(self, doc: Doc) -> Dict[str, Any]:
+    def extract_relations(
+        self, doc: Doc, context_text: str | None = None
+    ) -> Dict[str, Any]:
         """
         Extract entities and relationships from Spacy document using dependency parsing.
 
@@ -172,6 +174,7 @@ class DocumentParser:
 
         Args:
             doc: Spacy processed document
+            context_text: The original sentence text to use as a description
 
         Returns:
             Dictionary with 'nodes' and 'edges' keys representing the Knowledge Graph
@@ -179,6 +182,9 @@ class DocumentParser:
         nodes: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
         seen_entities: set[str] = set()
+
+        # Use the document text as context if not provided
+        description = context_text or doc.text
 
         for token in doc:
             # Focus on VERB tokens as relationship anchors
@@ -191,9 +197,10 @@ class DocumentParser:
                 if child.dep_ in ("nsubj", "nsubjpass"):
                     subject_text = self._expand_compound_noun(child)
                     subject = {
-                        "text": subject_text,
+                        "id": subject_text,
                         "pos": child.pos_,
-                        "type": self._classify_entity_type(child),
+                        "label": self._classify_entity_type(child),
+                        "description": description,
                     }
                     break
 
@@ -203,9 +210,10 @@ class DocumentParser:
                 if child.dep_ == "dobj":
                     obj_text = self._expand_compound_noun(child)
                     obj = {
-                        "text": obj_text,
+                        "id": obj_text,
                         "pos": child.pos_,
-                        "type": self._classify_entity_type(child),
+                        "label": self._classify_entity_type(child),
+                        "description": description,
                     }
                     break
 
@@ -215,39 +223,40 @@ class DocumentParser:
                 if child.dep_ == "pobj":
                     pobj_text = self._expand_compound_noun(child)
                     pobj = {
-                        "text": pobj_text,
+                        "id": pobj_text,
                         "pos": child.pos_,
-                        "type": self._classify_entity_type(child),
+                        "label": self._classify_entity_type(child),
+                        "description": description,
                     }
                     break
 
             # Only create edge if we have at least subject and one object
             if subject and (obj or pobj):
                 # Add subject node if not seen
-                if subject["text"] not in seen_entities:
+                if subject["id"] not in seen_entities:
                     nodes.append(subject)
-                    seen_entities.add(subject["text"])
+                    seen_entities.add(subject["id"])
 
                 # Add object node if not seen
-                if obj and obj["text"] not in seen_entities:
+                if obj and obj["id"] not in seen_entities:
                     nodes.append(obj)
-                    seen_entities.add(obj["text"])
+                    seen_entities.add(obj["id"])
 
-                if pobj and pobj["text"] not in seen_entities:
+                if pobj and pobj["id"] not in seen_entities:
                     nodes.append(pobj)
-                    seen_entities.add(pobj["text"])
+                    seen_entities.add(pobj["id"])
 
                 # Create edge: subject --[verb]--> object
                 edge = {
-                    "source": subject["text"],
-                    "target": (obj or pobj)["text"],
-                    "relation": token.lemma_,
+                    "source": subject["id"],
+                    "target": (obj or pobj)["id"],
+                    "relationship": token.lemma_,
                     "source_pos": subject["pos"],
                     "target_pos": (obj or pobj)["pos"],
                 }
                 edges.append(edge)
 
-        logger.debug(f"Extracted {len(nodes)} nodes and {len(edges)} edges")
+        logger.debug("Extracted %s nodes and %s edges", len(nodes), len(edges))
         return {"nodes": nodes, "edges": edges}
 
     def _classify_entity_type(self, token: Any) -> str:
@@ -308,7 +317,7 @@ class DocumentParser:
         if self.nlp is None:
             raise RuntimeError("DocumentParser not initialized. Model not loaded.")
 
-        logger.info(f"Parsing text ({len(text)} characters)")
+        logger.info("Parsing text (%s characters)", len(text))
 
         # Step 1: Preprocess text
         sentences = self.preprocess(text)
@@ -318,31 +327,38 @@ class DocumentParser:
         all_edges: List[Dict[str, Any]] = []
         seen_entities: set[str] = set()
 
-        for sentence in sentences:
-            doc = self.nlp(sentence)
+        for i, sentence in enumerate(sentences):
+            try:
+                doc = self.nlp(sentence)
 
-            # Extract entities and relations from this sentence
-            result = self.extract_relations(doc)
+                # Extract entities and relations from this sentence
+                result = self.extract_relations(doc, context_text=sentence)
 
-            # Merge nodes, avoiding duplicates
-            for node in result["nodes"]:
-                if node["text"] not in seen_entities:
-                    all_nodes.append(node)
-                    seen_entities.add(node["text"])
+                # Merge nodes, avoiding duplicates
+                for node in result["nodes"]:
+                    if node["id"] not in seen_entities:
+                        all_nodes.append(node)
+                        seen_entities.add(node["id"])
 
-            # Merge edges
-            all_edges.extend(result["edges"])
+                # Merge edges
+                all_edges.extend(result["edges"])
+            except Exception as e:
+                logger.error("Error parsing sentence %s: %s", i, e)
+                logger.exception(e)
+                raise e
 
         # Remove duplicate edges
         unique_edges = []
         seen_edges = set()
         for edge in all_edges:
-            edge_key = (edge["source"], edge["relation"], edge["target"])
+            edge_key = (edge["source"], edge["relationship"], edge["target"])
             if edge_key not in seen_edges:
                 unique_edges.append(edge)
                 seen_edges.add(edge_key)
 
-        logger.info(f"Parsed into {len(all_nodes)} nodes and {len(unique_edges)} edges")
+        logger.info(
+            "Parsed into %s nodes and %s edges", len(all_nodes), len(unique_edges)
+        )
 
         return {
             "metadata": {
