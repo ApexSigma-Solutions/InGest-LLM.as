@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Initializing InGest-LLM services...")
+    logger.info("SERVICE RELOAD TRIGGERED - TIMESTAMP: CHECK")
 
     settings = get_settings()
     logger.info(f"DEBUG: raw_db_url={settings.raw_db_url}")

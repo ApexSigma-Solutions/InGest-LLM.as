@@ -2,7 +2,7 @@ import io
 import logging
 import os
 import tempfile
-from typing import Optional
+
 
 # Parsers
 from pypdf import PdfReader
@@ -66,9 +66,14 @@ class FileLoaderService:
         reader = PdfReader(stream)
         text = []
         for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text.append(extracted)
+            try:
+                extracted = page.extract_text()
+                if extracted:
+                    text.append(extracted)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract text from page {reader.pages.index(page)}: {e}"
+                )
         return "\n".join(text)
 
     @staticmethod
