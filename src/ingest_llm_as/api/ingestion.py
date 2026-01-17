@@ -7,7 +7,6 @@ and storing content in the memOS.as memory system.
 
 import json
 import time
-import json
 import traceback
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -39,13 +38,6 @@ from ..services.conversation_synthesizer import (
 )
 
 
-class QueueStatus(BaseModel):
-    pending_count: int
-    processed_count: int
-    total_count: int
-    oldest_pending_age_seconds: Optional[float]
-
-
 from ..observability.langfuse_client import get_langfuse_client
 from ..observability.logging import (
     get_logger,
@@ -61,6 +53,7 @@ from ..utils.content_processor import (
     ContentProcessor,
     create_ingestion_metadata,
 )
+from src.shared.system_health import SystemHealth
 from ingest_llm_as.services.memos_client import (
     get_memos_client,
     MemOSClient,
@@ -68,6 +61,21 @@ from ingest_llm_as.services.memos_client import (
     MemOSAPIError,
     generate_content_hash,
 )
+
+
+class QueueStatus(BaseModel):
+    pending_count: int
+    processed_count: int
+    total_count: int
+    oldest_pending_age_seconds: Optional[float]
+
+
+class IngestStats(BaseModel):
+    queue: QueueStatus
+    throughput_24h: int
+    error_rate_24h: float
+    system_healthy: bool
+
 
 logger = get_logger(__name__)
 
@@ -86,7 +94,7 @@ async def ingest_text(
 
     This endpoint processes text content, chunks it if necessary,
     and stores it in the appropriate memOS.as memory tiers.
-    
+
     CRITICAL: Raw data is persisted to PostgreSQL BEFORE any processing
     to ensure 100% data retention (TN-CORE-101).
 
@@ -109,7 +117,7 @@ async def ingest_text(
     # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
     # Write raw data to PostgreSQL BEFORE any processing to ensure data retention
     try:
-        from datetime import timezone
+        payload_dict = request.model_dump()
 
         raw_record = RawIngestion(
             ingestion_id=ingestion_id,
@@ -240,9 +248,13 @@ async def ingest_text(
             )
 
         logger.info(
-            f"Created {len(chunks)} chunks for ingestion {ingestion_id}",
-            embeddings_generated=processing_stats["embeddings_generated"],
-            embedding_enabled=processing_stats["embedding_enabled"],
+            "Created %s chunks for ingestion %s",
+            len(chunks),
+            ingestion_id,
+            extra={
+                "embeddings_generated": processing_stats["embeddings_generated"],
+                "embedding_enabled": processing_stats["embedding_enabled"],
+            },
         )
 
         # Process synchronously or asynchronously based on request
@@ -286,6 +298,16 @@ async def ingest_text(
                 processing_time_ms=int((time.time() - start_time) * 1000),
                 message=f"Processed {len(results)} chunks, {len(failed_results)} failed",
             )
+
+            # STEP 3: MARK AS PROCESSED
+            try:
+                raw_record.processed = True
+                raw_record.processed_at = datetime.now(timezone.utc)
+                db.commit()
+                logger.info("Raw ingestion marked as processed: %s", ingestion_id)
+            except Exception as e:
+                db.rollback()
+                logger.error("Failed to mark ingestion as processed: %s", e)
 
         # Record completion metrics and logging
         duration_ms = int((time.time() - start_time) * 1000)
@@ -364,7 +386,7 @@ async def ingest_file(
 ) -> IngestionResponse:
     """
     Ingest a file (PDF, Text, Markdown) into the memory system.
-    
+
     CRITICAL: Raw file data is persisted to PostgreSQL BEFORE any processing
     to ensure 100% data retention (TN-CORE-101).
     """
@@ -375,7 +397,7 @@ async def ingest_file(
         # Read file data
         content_bytes = await file.read()
         filename = file.filename or "unknown"
-        
+
         # STEP 1: IMMEDIATE RAW PERSISTENCE (TN-CORE-101)
         # Write raw file data to PostgreSQL BEFORE any processing
         try:
@@ -383,9 +405,9 @@ async def ingest_file(
             if len(content_bytes) > settings.max_content_size:
                 raise HTTPException(
                     status_code=413,
-                    detail=f"File too large: {len(content_bytes)} > {settings.max_content_size}"
+                    detail=f"File too large: {len(content_bytes)} > {settings.max_content_size}",
                 )
-            
+
             raw_record = RawIngestion(
                 ingestion_id=ingestion_id,
                 source_type="file",
@@ -405,26 +427,24 @@ async def ingest_file(
             )
             db.add(raw_record)
             db.commit()
-            
+
             logger.info(f"Raw file ingestion persisted: {ingestion_id} ({filename})")
-            
+
         except IntegrityError as e:
             db.rollback()
             logger.warning(f"Duplicate ingestion ID: {ingestion_id}")
             raise HTTPException(
-                status_code=409,
-                detail=f"Ingestion {ingestion_id} already exists"
+                status_code=409, detail=f"Ingestion {ingestion_id} already exists"
             )
         except HTTPException:
             raise
-        except Exception as e:
+        except Exception:
             db.rollback()
-            logger.error(f"Failed to persist raw file ingestion: {e}")
+            logger.error("Failed to persist raw file ingestion")
             raise HTTPException(
-                status_code=500,
-                detail="Failed to persist raw file data"
+                status_code=500, detail="Failed to persist raw file data"
             )
-        
+
         # STEP 2: PROCESS FILE (existing logic)
         processor = ContentProcessor()
 
@@ -466,6 +486,23 @@ async def ingest_file(
         overall_status = (
             ProcessingStatus.FAILED if failed_results else ProcessingStatus.COMPLETED
         )
+
+        # STEP 3: MARK AS PROCESSED
+        try:
+            # We need to fetch the record again or keep a reference
+            # But here we have the ingestion_id
+            from sqlalchemy import update
+
+            db.execute(
+                update(RawIngestion)
+                .where(RawIngestion.ingestion_id == ingestion_id)
+                .values(processed=True, processed_at=datetime.now(timezone.utc))
+            )
+            db.commit()
+            logger.info("File ingestion marked as processed in DB.")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to mark file as processed: {e}")
 
         return IngestionResponse(
             ingestion_id=ingestion_id,
@@ -850,7 +887,7 @@ async def get_queue_status():
                 COUNT(*) as total,
                 EXTRACT(EPOCH FROM (NOW() - MIN(captured_at) FILTER (WHERE processed = FALSE))) as oldest_age
             FROM raw_ingestions
-            WHERE source_type = 'conversation'
+            WHERE source_type LIKE 'conversation%'
         """)
 
         return QueueStatus(
@@ -861,6 +898,59 @@ async def get_queue_status():
         )
     except Exception as e:
         logger.error(f"Queue status check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await conn.close()
+
+
+@router.get("/stats", response_model=IngestStats)
+async def get_ingest_stats():
+    """
+    Get comprehensive ingestion statistics for the dashboard.
+    """
+    db_url = settings.raw_db_url.replace("postgresql+asyncpg", "postgresql")
+    conn = await asyncpg.connect(db_url)
+    try:
+        # 1. Queue Status
+        stats = await conn.fetchrow("""
+            SELECT 
+                COUNT(*) FILTER (WHERE processed = FALSE) as pending,
+                COUNT(*) FILTER (WHERE processed = TRUE) as processed,
+                COUNT(*) as total,
+                EXTRACT(EPOCH FROM (NOW() - MIN(captured_at) FILTER (WHERE processed = FALSE))) as oldest_age
+            FROM raw_ingestions
+            WHERE source_type LIKE 'conversation%'
+        """)
+
+        queue = QueueStatus(
+            pending_count=stats["pending"] or 0,
+            processed_count=stats["processed"] or 0,
+            total_count=stats["total"] or 0,
+            oldest_pending_age_seconds=stats["oldest_age"],
+        )
+
+        # 2. Throughput & Error Rate (last 24h)
+        # Throughput = count of PROCESSED items
+        metrics = await conn.fetchrow("""
+            SELECT 
+                COUNT(*) FILTER (WHERE processed = TRUE) as total_24h,
+                COUNT(*) FILTER (WHERE processing_attempts > 1 AND processed = FALSE) as errors_24h
+            FROM raw_ingestions
+            WHERE (captured_at > NOW() - INTERVAL '24 hours' OR processed_at > NOW() - INTERVAL '24 hours')
+        """)
+
+        total_24h = metrics["total_24h"] or 0
+        errors_24h = metrics["errors_24h"] or 0
+        error_rate = (errors_24h / total_24h * 100) if total_24h > 0 else 0.0
+
+        return IngestStats(
+            queue=queue,
+            throughput_24h=total_24h,
+            error_rate_24h=round(error_rate, 2),
+            system_healthy=SystemHealth.is_healthy(),
+        )
+    except Exception as e:
+        logger.error(f"Ingest stats check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         await conn.close()

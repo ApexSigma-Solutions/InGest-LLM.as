@@ -8,7 +8,8 @@ using DocumentParser with Spacy Transformers and NLTK.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+import time
+from typing import Any, Dict, Optional
 
 from fastapi import (
     APIRouter,
@@ -20,8 +21,9 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from ingest_llm_as.parsers.document_parser import DocumentParser
+from ingest_llm_as.parsers.document_parser import DocumentParser, ExtractionMode
 from ingest_llm_as.services.file_loader_service import FileLoaderService
+from src.shared.pulse_emitter import get_pulse_emitter
 from src.shared.system_health import SystemHealth
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,10 @@ class ParseRequest(BaseModel):
     """Request model for text parsing."""
 
     text: str = Field(..., description="Text content to parse")
+    extraction_mode: Optional[ExtractionMode] = Field(
+        default=ExtractionMode.NER_ONLY,
+        description="Entity extraction mode (ner_only, svo, hybrid)",
+    )
     config: Dict[str, Any] = Field(
         default_factory=dict, description="Optional configuration for parsing behavior"
     )
@@ -124,8 +130,9 @@ async def parse_text(request: ParseRequest) -> ParseResponse:
                 "This may take 30+ seconds. Consider chunking."
             )
 
-        # Parse text using DocumentParser
-        result = parser.parse(request.text)
+        # Parse text using DocumentParser with specified mode
+        extraction_mode = request.extraction_mode or ExtractionMode.NER_ONLY
+        result = await parser.parse(request.text, extraction_mode=extraction_mode)
 
         # Add processing time warning to metadata if document is large
         if text_length > 10000:
@@ -163,6 +170,10 @@ async def parse_file(
     model_name: str = Form(
         None, description="Spacy model to use (e.g., en_core_web_trf)"
     ),
+    extraction_mode: ExtractionMode = Form(
+        ExtractionMode.NER_ONLY,
+        description="Entity extraction mode (ner_only, svo, hybrid)",
+    ),
 ) -> ParseResponse:
     """
     Parse uploaded file into a Knowledge Graph structure.
@@ -178,7 +189,6 @@ async def parse_file(
         # Read file content
         content_bytes = await file.read()
         filename = file.filename or "unknown"
-        mime_type = file.content_type or "text/plain"
 
         logger.info(
             f"Processing uploaded file: {filename} ({len(content_bytes)} bytes) Model: {model_name}"
@@ -214,7 +224,7 @@ async def parse_file(
                 "This may take 30+ seconds. Consider chunking."
             )
 
-        result = parser.parse(extracted_text)
+        result = await parser.parse(extracted_text, extraction_mode=extraction_mode)
 
         # Add filename to metadata
         result["metadata"]["source_file"] = filename
@@ -278,7 +288,8 @@ async def digest_document(file: UploadFile = File(...), persist: bool = Form(Fal
     """
     1. Checks System Health (Metal).
     2. Digests File (Stomach).
-    3. Returns Text (Nutrients).
+    3. Emits Pulse event (Nervous System).
+    4. Returns Text (Nutrients).
     """
 
     # 1. Check Metal
@@ -291,19 +302,42 @@ async def digest_document(file: UploadFile = File(...), persist: bool = Form(Fal
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
 
-    # 2. Digest
+    filename = file.filename or "unknown"
+    file_size_kb = round(file.size / 1024, 2) if file.size else 0
+
+    # 2. Digest with timing
+    start_time = time.perf_counter()
     try:
         await file.seek(0)
         raw_text = await FileLoaderService.process_file(file)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    duration_seconds = round(time.perf_counter() - start_time, 3)
 
-    # 3. Response
+    # 3. Emit Pulse (Gastric Signaling)
+    vitals = SystemHealth.check_vitals()
+    pulse = get_pulse_emitter()
+    try:
+        pulse.emit_digestion_complete(
+            filename=filename,
+            duration_seconds=duration_seconds,
+            ram_percent=vitals.get("ram_percent", 0),
+            model="FileLoaderService",  # This endpoint uses FileLoaderService
+            file_size_kb=file_size_kb,
+            character_count=len(raw_text),
+        )
+        logger.info(f"🫀 Pulse emitted for {filename} digestion complete")
+    except Exception as pulse_error:
+        # Pulse failure should not break the main flow
+        logger.warning(f"⚠️ Failed to emit pulse for {filename}: {pulse_error}")
+
+    # 4. Response
     return {
         "status": "success",
-        "filename": file.filename,
-        "file_size_kb": round(file.size / 1024, 2),
-        "system_vitals": SystemHealth.check_vitals(),  # Return vitals so you can see them!
+        "filename": filename,
+        "file_size_kb": file_size_kb,
+        "system_vitals": vitals,
         "character_count": len(raw_text),
         "preview": raw_text[:500] + "...",
+        "processing_duration_sec": duration_seconds,
     }

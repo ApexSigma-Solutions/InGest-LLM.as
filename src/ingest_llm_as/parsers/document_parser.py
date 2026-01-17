@@ -10,13 +10,32 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List
+import json
+from enum import Enum
+from typing import Any, Dict, List, Optional
+from openai import AsyncOpenAI
+from ingest_llm_as.config import get_settings
 
 import spacy
 from spacy.tokens import Doc
 from spacy.language import Language
 
 logger = logging.getLogger(__name__)
+
+
+class ExtractionMode(str, Enum):
+    """Configurable entity extraction modes.
+
+    NER_ONLY: Extract only Named Entities (PERSON, ORG, GPE, etc.) - Default, most accurate
+    SVO: Extract all Subject-Verb-Object triples (original behavior) - Most inclusive
+    HYBRID: Extract NER entities with relationship inference between them - Balanced
+    LLM_INFERENCE: Use an LLM to extract complex entities and relationships - Most intelligent
+    """
+
+    NER_ONLY = "ner_only"
+    SVO = "svo"
+    HYBRID = "hybrid"
+    LLM_INFERENCE = "llm_inference"
 
 
 class DocumentParser:
@@ -259,6 +278,86 @@ class DocumentParser:
         logger.debug("Extracted %s nodes and %s edges", len(nodes), len(edges))
         return {"nodes": nodes, "edges": edges}
 
+    def extract_named_entities(
+        self, doc: Doc, context_text: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Extract ONLY named entities (NER) from document.
+
+        This method filters for meaningful entities recognized by Spacy's NER:
+        PERSON, ORG, GPE, PRODUCT, WORK_OF_ART, etc.
+
+        Args:
+            doc: Spacy processed document
+            context_text: The original sentence text for description
+
+        Returns:
+            Dictionary with 'nodes' and 'edges' keys
+        """
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
+        seen_entities: set[str] = set()
+
+        description = context_text or doc.text
+
+        # Extract all named entities from doc.ents
+        entity_list = []
+        for ent in doc.ents:
+            if ent.text not in seen_entities:
+                node = {
+                    "id": ent.text,
+                    "pos": "PROPN",  # Named entities are proper nouns
+                    "label": ent.label_,
+                    "description": description,
+                }
+                nodes.append(node)
+                seen_entities.add(ent.text)
+                entity_list.append(ent)
+
+        # Create relationships between co-occurring entities in same sentence
+        for i, ent1 in enumerate(entity_list):
+            for ent2 in entity_list[i + 1 :]:
+                # Find relationship verb between entities
+                rel_verb = self._find_connecting_verb(doc, ent1, ent2)
+                if rel_verb:
+                    edges.append(
+                        {
+                            "source": ent1.text,
+                            "target": ent2.text,
+                            "relationship": rel_verb,
+                            "source_pos": "PROPN",
+                            "target_pos": "PROPN",
+                        }
+                    )
+
+        logger.debug(
+            "NER extracted %s entities and %s relationships", len(nodes), len(edges)
+        )
+        return {"nodes": nodes, "edges": edges}
+
+    def _find_connecting_verb(self, doc: Doc, ent1: Any, ent2: Any) -> Optional[str]:
+        """
+        Find a verb connecting two entities in the dependency tree.
+
+        Args:
+            doc: Spacy document
+            ent1: First entity
+            ent2: Second entity
+
+        Returns:
+            Verb lemma if found, else 'relates_to'
+        """
+        # Find verbs between the two entities
+        start_idx = min(ent1.start, ent2.start)
+        end_idx = max(ent1.end, ent2.end)
+
+        for token in doc[start_idx:end_idx]:
+            if token.pos_ == "VERB":
+                return token.lemma_
+
+        # Default relationship if no verb found
+        return "relates_to"
+
     def _classify_entity_type(self, token: Any) -> str:
         """
         Classify entity type based on Spacy NER and POS tags.
@@ -295,34 +394,97 @@ class DocumentParser:
 
         return pos_mapping.get(token.pos_, "ENTITY")
 
-    def parse(self, text: str) -> Dict[str, Any]:
+    async def extract_with_llm(self, text: str) -> Dict[str, Any]:
+        """
+        Use an LLM to extract entities and relationships from text.
+        Returns nodes and edges in graph format.
+        """
+        settings = get_settings()
+
+        # Initialize client
+        if settings.llm_provider == "openai":
+            if not settings.openai_api_key:
+                logger.error("OpenAI API Key missing")
+                return {"nodes": [], "edges": []}
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+        elif settings.llm_provider == "ollama":
+            base_url = settings.ollama_base_url
+            if not base_url.endswith("/v1"):
+                base_url = f"{base_url}/v1"
+            client = AsyncOpenAI(base_url=base_url, api_key="ollama")
+        else:
+            return {"nodes": [], "edges": []}
+
+        system_prompt = (
+            "You are an expert knowledge engineer. Extract entities and relationships from the following text into a Knowledge Graph JSON format.\n"
+            "Output ONLY a raw JSON object with this exact structure:\n"
+            "{\n"
+            '  "nodes": [{"id": "UniqueId", "label": "PERSON|ORG|TECH|CONCEPT", "pos": "NOUN", "description": "context"}],\n'
+            '  "edges": [{"source": "Id1", "target": "Id2", "relationship": "relationship_verb"}]\n'
+            "}\n"
+            "Be precise and extractive. Do not invent facts. Avoid very generic nodes."
+        )
+
+        try:
+            logger.info("Requesting LLM relationship extraction...")
+            response = await client.chat.completions.create(
+                model=settings.summarization_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+
+            content = response.choices[0].message.content
+            if not content:
+                return {"nodes": [], "edges": []}
+
+            data = json.loads(content)
+            return {"nodes": data.get("nodes", []), "edges": data.get("edges", [])}
+        except Exception as e:
+            logger.error(f"LLM Extraction failed: {e}")
+            return {"nodes": [], "edges": []}
+
+    async def parse(
+        self, text: str, extraction_mode: ExtractionMode = ExtractionMode.NER_ONLY
+    ) -> Dict[str, Any]:
         """
         Parse text into a Knowledge Graph structure.
 
         Orchestrates the full pipeline:
         1. Preprocess text (clean, sentence tokenize)
         2. Process each sentence with Spacy
-        3. Extract entities and relationships
+        3. Extract entities and relationships (extractive or LLM based)
         4. Return structured graph
-
-        Args:
-            text: Raw input text to parse
-
-        Returns:
-            Dictionary with 'metadata', 'nodes', and 'edges' keys
-
-        Raises:
-            RuntimeError: If parser is not initialized
         """
         if self.nlp is None:
             raise RuntimeError("DocumentParser not initialized. Model not loaded.")
 
-        logger.info("Parsing text (%s characters)", len(text))
+        logger.info(
+            "Parsing text (%s characters) in %s mode", len(text), extraction_mode
+        )
 
-        # Step 1: Preprocess text
+        # Handle LLM mode separately as it can process larger chunks or full text
+        if extraction_mode == ExtractionMode.LLM_INFERENCE:
+            llm_result = await self.extract_with_llm(text)
+            from datetime import datetime
+
+            return {
+                "metadata": {
+                    "parser": "llm_inference",
+                    "model": "llm",
+                    "mode": extraction_mode.value,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                "nodes": llm_result["nodes"],
+                "edges": llm_result["edges"],
+            }
+
+        # Step 1: Preprocess text for extractive modes
         sentences = self.preprocess(text)
 
-        # Step 2: Process each sentence with Spacy
         all_nodes: List[Dict[str, Any]] = []
         all_edges: List[Dict[str, Any]] = []
         seen_entities: set[str] = set()
@@ -331,8 +493,18 @@ class DocumentParser:
             try:
                 doc = self.nlp(sentence)
 
-                # Extract entities and relations from this sentence
-                result = self.extract_relations(doc, context_text=sentence)
+                # Extract entities and relations based on mode
+                if extraction_mode == ExtractionMode.NER_ONLY:
+                    result = self.extract_named_entities(doc, context_text=sentence)
+                elif extraction_mode == ExtractionMode.SVO:
+                    result = self.extract_relations(doc, context_text=sentence)
+                else:  # HYBRID
+                    ner_result = self.extract_named_entities(doc, context_text=sentence)
+                    svo_result = self.extract_relations(doc, context_text=sentence)
+                    result = {
+                        "nodes": ner_result["nodes"],
+                        "edges": svo_result["edges"] + ner_result["edges"],
+                    }
 
                 # Merge nodes, avoiding duplicates
                 for node in result["nodes"]:
@@ -340,32 +512,34 @@ class DocumentParser:
                         all_nodes.append(node)
                         seen_entities.add(node["id"])
 
-                # Merge edges
+                # Add all edges (redundancy handled by Neo4j later)
                 all_edges.extend(result["edges"])
+
             except Exception as e:
-                logger.error("Error parsing sentence %s: %s", i, e)
-                logger.exception(e)
-                raise e
+                logger.error(f"Error parsing sentence {i}: {e}")
+                continue
 
         # Remove duplicate edges
         unique_edges = []
         seen_edges = set()
         for edge in all_edges:
-            edge_key = (edge["source"], edge["relationship"], edge["target"])
+            edge_key = (
+                edge["source"],
+                edge.get("type") or edge.get("relationship"),
+                edge["target"],
+            )
             if edge_key not in seen_edges:
                 unique_edges.append(edge)
                 seen_edges.add(edge_key)
 
-        logger.info(
-            "Parsed into %s nodes and %s edges", len(all_nodes), len(unique_edges)
-        )
+        from datetime import datetime
 
         return {
             "metadata": {
+                "parser": "document_parser",
                 "model": self.model_name,
-                "sentences_processed": len(sentences),
-                "nodes_extracted": len(all_nodes),
-                "edges_extracted": len(unique_edges),
+                "mode": extraction_mode.value,
+                "timestamp": datetime.now().isoformat(),
             },
             "nodes": all_nodes,
             "edges": unique_edges,

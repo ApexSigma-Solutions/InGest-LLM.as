@@ -83,11 +83,16 @@ class Settings(BaseSettings):
     # For Ollama, the model might be 'llama3' or 'mistral'. For OpenAI, 'gpt-4o'.
     summarization_model: str = Field(default="llama3.1", description="Model used for summarization")
 
+    # --- Redis Config (Pulse/Nervous System) ---
+    redis_host: str = Field(default="localhost", description="Redis host for Pulse emitter")
+    redis_port: int = Field(default=6380, description="Redis port for Pulse emitter")
+    redis_key_prefix: str = Field(default="pulse:", description="Redis key prefix for pulse stream")
+
     # --- Database Config ---
     # Connection string to the Ingest Database (where raw_ingestions table lives)
     # Defaulting to the known local value or override via env INGEST_RAW_DB_URL
     raw_db_url: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/ingest_db",
+        default="postgresql+asyncpg://postgres:postgres@localhost:6000/ingest_db",
         description="Connection string for Ingest Database"
     )
 

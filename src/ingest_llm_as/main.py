@@ -9,6 +9,7 @@ from .api.repository import router as repository_router
 from .api.ecosystem import router as ecosystem_router
 from .api.analysis import router as analysis_router
 from .api.graph_parser import router as graph_parser_router
+from .api.vitals import router as vitals_router
 
 from .api.omega_ingest import router as omega_ingest_router
 
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(ecosystem_router)
     app.include_router(analysis_router)
     app.include_router(graph_parser_router)
+    app.include_router(vitals_router)
     app.include_router(omega_ingest_router)
     app.include_router(eod_logs_router)
     app.include_router(webhook_forwarder_router)

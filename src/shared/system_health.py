@@ -27,6 +27,15 @@ class SystemHealth:
             "disk_free_gb": round(shutil.disk_usage("/").free / (1024**3), 2),
             "gpu": SystemHealth._get_gpu_stats() if HAS_GPU else "No GPU Driver",
         }
+
+        # Add vram_percent for dashboard compatibility
+        if HAS_GPU and isinstance(vitals["gpu"], dict):
+            used = vitals["gpu"].get("vram_used_mb", 0)
+            total = vitals["gpu"].get("vram_total_mb", 1)  # Avoid div by zero
+            vitals["vram_percent"] = round((used / total) * 100, 2)
+        else:
+            vitals["vram_percent"] = 0
+
         return vitals
 
     @staticmethod
