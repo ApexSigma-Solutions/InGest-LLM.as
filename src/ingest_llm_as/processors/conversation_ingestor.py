@@ -88,7 +88,9 @@ class ConversationIngestor:
                     return 0
 
                 record_id = row["id"]
-                source_id = row.get("source_id", row.get("ingestion_id", "unknown"))
+                source_id = str(
+                    row.get("source_id", row.get("ingestion_id", "unknown"))
+                )
                 raw_data = json.loads(row["raw_payload"])
                 raw_metadata = row.get("raw_metadata") or {}
                 platform = raw_metadata.get("platform", "unknown")
